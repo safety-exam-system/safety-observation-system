@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type Observation = {
@@ -11,7 +11,7 @@ type Observation = {
   description: string;
 };
 
-export default function ObservationListPage() {
+function ObservationListContent() {
   const searchParams = useSearchParams();
 
   const category = searchParams.get("category") || "Unsafe Act";
@@ -55,7 +55,6 @@ export default function ObservationListPage() {
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-8 sm:px-6">
       <div className="mx-auto max-w-5xl">
-
         {/* Header */}
         <header className="mb-6 rounded-2xl bg-blue-800 p-6 text-white shadow-lg">
           <p className="text-sm font-medium text-blue-200">
@@ -99,11 +98,10 @@ export default function ObservationListPage() {
         {/* Filters */}
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="mb-4 text-lg font-bold text-slate-900">
-            Search & Filter
+            Search &amp; Filter
           </h3>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-
             {/* Year */}
             <div>
               <label
@@ -250,8 +248,23 @@ export default function ObservationListPage() {
         >
           ← Back to Dashboard
         </button>
-
       </div>
     </main>
+  );
+}
+
+export default function ObservationListPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-slate-100 px-4 py-8 sm:px-6">
+          <div className="mx-auto max-w-5xl rounded-2xl bg-white p-6 text-center shadow-sm">
+            Loading observations...
+          </div>
+        </main>
+      }
+    >
+      <ObservationListContent />
+    </Suspense>
   );
 }

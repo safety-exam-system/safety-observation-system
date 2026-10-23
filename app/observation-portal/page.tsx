@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent, type DragEvent } from "react";
+import { useEffect, useState, type FormEvent, type DragEvent } from "react";
 import { createClient } from "@/lib/supabase";
 
 type ObservationCategory = "Unsafe Act" | "Unsafe Condition" | "Near Miss";
@@ -150,14 +150,7 @@ const inputClass =
   "w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
 const labelClass = "mb-2 block text-sm font-semibold text-slate-700";
 
-function todayDate() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
-
-function minAllowedDate() {
-  const date = new Date();
-  date.setDate(date.getDate() - 5);
+function formatLocalDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
@@ -268,7 +261,7 @@ export default function ObservationPortalPage() {
   const [personType, setPersonType] = useState<PersonType | "">("");
   const [violatorName, setViolatorName] = useState("");
   const [observerName, setObserverName] = useState("");
-  const [observationDate, setObservationDate] = useState(todayDate());
+  const [observationDate, setObservationDate] = useState("");
   const [location, setLocation] = useState("");
   const [atRiskBehaviourDescription, setAtRiskBehaviourDescription] = useState("");
   const [behaviourCategory, setBehaviourCategory] = useState("");
@@ -280,7 +273,7 @@ export default function ObservationPortalPage() {
 
   // Unsafe Condition state
   const [conditionDescription, setConditionDescription] = useState("");
-  const [conditionDate, setConditionDate] = useState(todayDate());
+  const [conditionDate, setConditionDate] = useState("");
   const [responsiblePerson, setResponsiblePerson] = useState("");
   const [conditionLocation, setConditionLocation] = useState("");
   const [reportingPerson, setReportingPerson] = useState("");
@@ -297,7 +290,7 @@ export default function ObservationPortalPage() {
   // Near Miss state
   const [nearMissDescription, setNearMissDescription] = useState("");
   const [nearMissLocation, setNearMissLocation] = useState("");
-  const [nearMissDate, setNearMissDate] = useState(todayDate());
+  const [nearMissDate, setNearMissDate] = useState("");
   const [nearMissResponsiblePerson, setNearMissResponsiblePerson] = useState("");
   const [nearMissCompanyName, setNearMissCompanyName] = useState("");
   const [nearMissObserverName, setNearMissObserverName] = useState("");
@@ -311,20 +304,36 @@ export default function ObservationPortalPage() {
   const [nearMissPhotos, setNearMissPhotos] = useState<File[]>([]);
   const [nearMissSiteIncharge, setNearMissSiteIncharge] = useState("");
   const [nearMissDragging, setNearMissDragging] = useState(false);
+const [today, setToday] = useState("");
+const [minAllowed, setMinAllowed] = useState("");
 
+useEffect(() => {
+  const now = new Date();
+  const todayValue = formatLocalDate(now);
+
+  const minDate = new Date(now);
+  minDate.setDate(minDate.getDate() - 5);
+  const minValue = formatLocalDate(minDate);
+
+  setToday(todayValue);
+  setMinAllowed(minValue);
+  setObservationDate(todayValue);
+  setConditionDate(todayValue);
+  setNearMissDate(todayValue);
+}, []);
   const [formMessage, setFormMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">("error");
 
   function resetUnsafeActForm() {
     setViolationCompany(""); setContractorName(""); setPersonType("");
-    setViolatorName(""); setObserverName(""); setObservationDate(todayDate());
+    setViolatorName(""); setObserverName(""); setObservationDate(today);
     setLocation(""); setAtRiskBehaviourDescription(""); setBehaviourCategory("");
     setViolationType(""); setSubClassification(""); setPeopleWorkingCorrectly("");
     setPeopleShowingWrongBehaviour(""); setPeopleGivenSpotCorrection("");
   }
 
   function resetUnsafeConditionForm() {
-    setConditionDescription(""); setConditionDate(todayDate()); setResponsiblePerson("");
+    setConditionDescription(""); setConditionDate(today); setResponsiblePerson("");
     setConditionLocation(""); setReportingPerson(""); setObserverCompanyName("");
     setConditionCategory(""); setConditionSubCategory(""); setHazardClass("");
     setLeadingActivity(""); setRecommendations(""); setSiteIncharge("");
@@ -332,7 +341,7 @@ export default function ObservationPortalPage() {
   }
 
   function resetNearMissForm() {
-    setNearMissDescription(""); setNearMissLocation(""); setNearMissDate(todayDate());
+    setNearMissDescription(""); setNearMissLocation(""); setNearMissDate(today);
     setNearMissResponsiblePerson(""); setNearMissCompanyName(""); setNearMissObserverName("");
     setNearMissUnsafeType(""); setNearMissCategory(""); setNearMissSubCategory("");
     setNearMissHazardClass(""); setNearMissLeadingActivity(""); setNearMissRootCause("");
@@ -496,7 +505,7 @@ export default function ObservationPortalPage() {
               {violationCompany && <div><label htmlFor="personType" className={labelClass}>Person Type <span className="text-red-600">*</span></label><select id="personType" value={personType} onChange={(event) => { setPersonType(event.target.value as PersonType | ""); setViolatorName(""); }} required className={inputClass}><option value="">Select Person Type</option><option value="Employee">Employee</option><option value="Worker">Worker</option></select></div>}
               <div><label htmlFor="violatorName" className={labelClass}>Violator Name <span className="text-red-600">*</span></label><input id="violatorName" value={violatorName} onChange={(event) => setViolatorName(event.target.value)} placeholder="Enter the name of the person who committed the violation" maxLength={150} required className={inputClass} /></div>
               <div><label htmlFor="observerName" className={labelClass}>Observer Name <span className="text-red-600">*</span></label><input id="observerName" value={observerName} onChange={(event) => setObserverName(event.target.value)} placeholder="Enter the name of the person who observed the violation" maxLength={150} required className={inputClass} /></div>
-              <div><label htmlFor="observationDate" className={labelClass}>Date <span className="text-red-600">*</span></label><input id="observationDate" type="date" value={observationDate} min={minAllowedDate()} max={todayDate()} onChange={(event) => setObservationDate(event.target.value)} required className={inputClass} /></div>
+              <div><label htmlFor="observationDate" className={labelClass}>Date <span className="text-red-600">*</span></label><input id="observationDate" type="date" value={observationDate} min={minAllowed} max={today} onChange={(event) => setObservationDate(event.target.value)} required className={inputClass} /></div>
               <div><label htmlFor="location" className={labelClass}>Location <span className="text-red-600">*</span></label><input id="location" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Enter incident location" maxLength={250} required className={inputClass} /></div>
               <div><label htmlFor="atRiskBehaviourDescription" className={labelClass}>At-Risk Behaviour Description <span className="text-red-600">*</span></label><textarea id="atRiskBehaviourDescription" value={atRiskBehaviourDescription} onChange={(event) => setAtRiskBehaviourDescription(event.target.value)} placeholder="Describe the at-risk behaviour and what you observed..." rows={5} maxLength={5000} required className={`${inputClass} resize-y`} /></div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -522,7 +531,7 @@ export default function ObservationPortalPage() {
             <div className="mb-6 border-b border-slate-200 pb-5"><p className="text-sm font-semibold uppercase tracking-wide text-amber-700">Selected Category: Unsafe Condition</p><h2 className="mt-1 text-2xl font-bold text-slate-900">Unsafe Condition Observation Details</h2><p className="mt-2 text-sm text-slate-600">Enter the details of the unsafe condition observed.</p></div>
             <form onSubmit={handleSaveUnsafeCondition} className="space-y-5">
               <div><label htmlFor="conditionDescription" className={labelClass}>Unsafe Condition Description <span className="text-red-600">*</span></label><textarea id="conditionDescription" value={conditionDescription} onChange={(event) => setConditionDescription(event.target.value)} rows={4} maxLength={5000} required placeholder="Describe the unsafe condition..." className={`${inputClass} resize-y`} /></div>
-              <div><label htmlFor="conditionDate" className={labelClass}>Unsafe Condition Occurred Date <span className="text-red-600">*</span></label><input id="conditionDate" type="date" value={conditionDate} min={minAllowedDate()} max={todayDate()} onChange={(event) => setConditionDate(event.target.value)} required className={inputClass} /></div>
+              <div><label htmlFor="conditionDate" className={labelClass}>Unsafe Condition Occurred Date <span className="text-red-600">*</span></label><input id="conditionDate" type="date" value={conditionDate} min={minAllowed} max={today} onChange={(event) => setConditionDate(event.target.value)} required className={inputClass} /></div>
               <div><label htmlFor="responsiblePerson" className={labelClass}>Responsible Person to take Immediate Actions <span className="text-red-600">*</span></label><input id="responsiblePerson" value={responsiblePerson} onChange={(event) => setResponsiblePerson(event.target.value)} maxLength={200} required className={inputClass} /></div>
               <div><label htmlFor="conditionLocation" className={labelClass}>Location of Unsafe Condition <span className="text-red-600">*</span></label><input id="conditionLocation" value={conditionLocation} onChange={(event) => setConditionLocation(event.target.value)} maxLength={250} required className={inputClass} /></div>
               <div><label htmlFor="reportingPerson" className={labelClass}>Person Reporting Unsafe Condition <span className="text-red-600">*</span></label><input id="reportingPerson" value={reportingPerson} onChange={(event) => setReportingPerson(event.target.value)} maxLength={150} required className={inputClass} /></div>
@@ -546,7 +555,7 @@ export default function ObservationPortalPage() {
             <form onSubmit={handleSaveNearMiss} className="space-y-5">
               <div><label htmlFor="nearMissDescription" className={labelClass}>Near Miss Description <span className="text-red-600">*</span></label><textarea id="nearMissDescription" value={nearMissDescription} onChange={(event) => setNearMissDescription(event.target.value)} rows={4} maxLength={5000} required placeholder="Describe the near miss..." className={`${inputClass} resize-y`} /></div>
               <div><label htmlFor="nearMissLocation" className={labelClass}>Exact Location of Near Miss <span className="text-red-600">*</span></label><input id="nearMissLocation" value={nearMissLocation} onChange={(event) => setNearMissLocation(event.target.value)} maxLength={250} required className={inputClass} /></div>
-              <div><label htmlFor="nearMissDate" className={labelClass}>Near Miss Occurred Date <span className="text-red-600">*</span></label><input id="nearMissDate" type="date" value={nearMissDate} min={minAllowedDate()} max={todayDate()} onChange={(event) => setNearMissDate(event.target.value)} required className={inputClass} /></div>
+              <div><label htmlFor="nearMissDate" className={labelClass}>Near Miss Occurred Date <span className="text-red-600">*</span></label><input id="nearMissDate" type="date" value={nearMissDate} min={minAllowed} max={today} onChange={(event) => setNearMissDate(event.target.value)} required className={inputClass} /></div>
               <div><label htmlFor="nearMissResponsiblePerson" className={labelClass}>Responsible Person to take Immediate Actions (Near Miss) <span className="text-red-600">*</span></label><input id="nearMissResponsiblePerson" value={nearMissResponsiblePerson} onChange={(event) => setNearMissResponsiblePerson(event.target.value)} maxLength={200} required className={inputClass} /></div>
               <div><label htmlFor="nearMissCompanyName" className={labelClass}>Near Miss Happened Company Name <span className="text-red-600">*</span></label><input id="nearMissCompanyName" value={nearMissCompanyName} onChange={(event) => setNearMissCompanyName(event.target.value)} maxLength={200} required className={inputClass} /></div>
               <div><label htmlFor="nearMissObserverName" className={labelClass}>Near Miss Observer Name <span className="text-red-600">*</span></label><input id="nearMissObserverName" value={nearMissObserverName} onChange={(event) => setNearMissObserverName(event.target.value)} maxLength={150} required className={inputClass} /></div>
