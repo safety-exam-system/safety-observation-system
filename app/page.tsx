@@ -45,14 +45,13 @@ export default function Home() {
               </button>
 
               <button
-                disabled
-                className="flex min-h-14 w-full cursor-not-allowed items-center justify-center rounded-xl border border-slate-300 bg-slate-100 px-6 py-4 text-lg font-semibold text-slate-500"
-              >
-                Upload Observation
-                <span className="ml-2 text-sm font-normal">
-                  (Coming Later)
-                </span>
-              </button>
+  onClick={() => {
+    window.location.href = "/observation-portal";
+  }}
+  className="flex min-h-14 w-full items-center justify-center rounded-xl border border-slate-300 bg-slate-100 px-6 py-4 text-lg font-semibold text-slate-700 transition hover:bg-slate-200"
+>
+  Upload Observation
+</button>
 
               <button
                 onClick={() => setShowOptions(false)}
