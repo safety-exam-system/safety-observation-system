@@ -23,44 +23,18 @@ export default function Home() {
             </p>
           </div>
 
-          {!showOptions ? (
-            <button
-              onClick={() => setShowOptions(true)}
-              className="mx-auto flex min-h-14 w-full max-w-md items-center justify-center rounded-xl bg-blue-700 px-6 py-4 text-lg font-semibold text-white transition hover:bg-blue-800"
-            >
-              Safety Observation
-              <span className="ml-3" aria-hidden="true">
-                →
-              </span>
-            </button>
-          ) : (
-            <div className="mx-auto w-full max-w-md space-y-4">
-              <button
-                onClick={() => {
-                  window.location.href = "/admin-dashboard";
-                }}
-                className="flex min-h-14 w-full items-center justify-center rounded-xl bg-blue-700 px-6 py-4 text-lg font-semibold text-white transition hover:bg-blue-800"
-              >
-                Admin Dashboard
-              </button>
-
-              <button
-  onClick={() => {
-    window.location.href = "/observation-portal";
-  }}
-  className="flex min-h-14 w-full items-center justify-center rounded-xl border border-slate-300 bg-slate-100 px-6 py-4 text-lg font-semibold text-slate-700 transition hover:bg-slate-200"
->
-  Upload Observation
-</button>
-
-              <button
-                onClick={() => setShowOptions(false)}
-                className="w-full py-3 text-sm font-medium text-blue-700 hover:underline"
-              >
-                ← Back
-              </button>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href = "/site-selection";
+            }}
+            className="mx-auto flex min-h-14 w-full max-w-md items-center justify-center rounded-xl bg-blue-700 px-6 py-4 text-lg font-semibold text-white transition hover:bg-blue-800"
+          >
+            Safety Observation
+            <span className="ml-3" aria-hidden="true">
+              →
+            </span>
+          </button>
 
           <div className="mt-10 border-t border-slate-200 pt-5 text-center text-sm text-slate-500">
             Safety Observation

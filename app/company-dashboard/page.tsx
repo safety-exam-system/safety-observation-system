@@ -16,14 +16,18 @@ type Site = {
 };
 
 type Observation = {
-  id: string;
-  site_code: string;
-  category: string;
+  id: string | number;
+  site_code: string | null;
+  category: string | null;
   observation_date: string | null;
   submitted_by: string | null;
   description: string | null;
   status: string | null;
-  created_at: string;
+  created_at: string | null;
+  violation_company?: string | null;
+  contractor_name?: string | null;
+  observer_company?: string | null;
+  near_miss_company_name?: string | null;
 };
 
 const CATEGORIES = [
@@ -57,9 +61,45 @@ const CATEGORIES = [
   },
 ];
 
+function normalize(value: string | null | undefined) {
+  return (value || "").trim().toLowerCase();
+}
+
+function matchesCompany(
+  observation: Observation,
+  companyName: string
+) {
+  const name = normalize(companyName);
+
+  if (!name) return false;
+
+  switch (observation.category) {
+    case "Unsafe Act": {
+      const violationCompany = normalize(
+        observation.violation_company
+      );
+
+      if (violationCompany === "contractor") {
+        return normalize(observation.contractor_name) === name;
+      }
+
+      return violationCompany === name;
+    }
+
+    case "Unsafe Condition":
+      return normalize(observation.observer_company) === name;
+
+    case "Near Miss":
+      return normalize(observation.near_miss_company_name) === name;
+
+    default:
+      return false;
+  }
+}
+
 function CompanyDashboardContent() {
   const searchParams = useSearchParams();
-  const companyCode = (searchParams.get("companyCode") || "").toUpperCase();
+  const companyCode = (searchParams.get("companyCode") || "").trim().toUpperCase();
 
   const [supabase] = useState(() => createClient());
 
@@ -83,7 +123,7 @@ function CompanyDashboardContent() {
         return;
       }
 
-      // 1. Find the company.
+      // 1. Find the company using its existing Company Code.
       const { data: companyData, error: companyError } = await supabase
         .from("companies")
         .select("id, company_code, company_name")
@@ -97,39 +137,60 @@ function CompanyDashboardContent() {
         return;
       }
 
-      setCompany(companyData as Company);
+      const currentCompany = companyData as Company;
+      setCompany(currentCompany);
 
       // 2. Find sites linked to this company.
       const { data: siteData, error: siteError } = await supabase
         .from("sites")
         .select("site_code, site_name")
-        .eq("company_id", companyData.id);
+        .eq("company_id", currentCompany.id);
 
       if (siteError) throw siteError;
 
       const companySites = (siteData || []) as Site[];
       setSites(companySites);
 
-      // 3. Get observations for those sites.
-      if (companySites.length === 0) {
-        setObservations([]);
-        return;
-      }
-
-      const siteCodes = companySites.map((site) => site.site_code);
-
+      // 3. Load observations independently of the site-company link.
+      // Observation records contain the actual company name in
+      // category-specific fields, so a site link is not required
+      // to identify the company's observations.
       const { data: observationData, error: observationError } =
         await supabase
           .from("observations")
           .select(
-            "id, site_code, category, observation_date, submitted_by, description, status, created_at"
+            [
+              "id",
+              "site_code",
+              "category",
+              "observation_date",
+              "submitted_by",
+              "description",
+              "status",
+              "created_at",
+              "violation_company",
+              "contractor_name",
+              "observer_company",
+              "near_miss_company_name",
+            ].join(",")
           )
-          .in("site_code", siteCodes)
+          .in("category", [
+            "Unsafe Act",
+            "Unsafe Condition",
+            "Near Miss",
+          ])
           .order("observation_date", { ascending: false });
 
       if (observationError) throw observationError;
 
-      setObservations((observationData || []) as Observation[]);
+      // 4. Count only observations matching this company's name.
+      const companyObservations: Observation[] = (
+        (observationData || []) as unknown as Observation[]
+      ).filter((observation) =>
+        matchesCompany(observation, currentCompany.company_name)
+      );
+
+      setObservations(companyObservations);
     } catch (err) {
       console.error("Company dashboard loading error:", err);
       setError(
@@ -145,7 +206,7 @@ function CompanyDashboardContent() {
   }, [loadDashboard]);
 
   const getObservationDate = (observation: Observation) =>
-    observation.observation_date || observation.created_at;
+    observation.observation_date || observation.created_at || "";
 
   const years = Array.from(
     new Set(
@@ -162,7 +223,8 @@ function CompanyDashboardContent() {
     const month = date ? date.slice(5, 7) : "";
 
     const matchesYear = selectedYear === "All" || year === selectedYear;
-    const matchesMonth = selectedMonth === "All" || month === selectedMonth;
+    const matchesMonth =
+      selectedMonth === "All" || month === selectedMonth;
 
     return matchesYear && matchesMonth;
   });
@@ -189,11 +251,11 @@ function CompanyDashboardContent() {
       companyCode,
       category,
       status,
-      year: selectedYear,
-      month: selectedMonth,
+      year: selectedYear === "All" ? "" : selectedYear,
+      month: selectedMonth === "All" ? "" : selectedMonth,
     });
 
-    window.location.href = `/observation-list?${params.toString()}`;
+    window.location.href = `/company-observation-list?${params.toString()}`;
   }
 
   if (loading) {
@@ -523,7 +585,17 @@ function CompanyDashboardContent() {
                       type="button"
                       onClick={() => {
                         setSelectedMonth(month);
-                        openObservationList("All");
+
+                        const params = new URLSearchParams({
+                          companyCode,
+                          category: "All",
+                          status: "All",
+                          year: selectedYear === "All" ? "" : selectedYear,
+                          month,
+                        });
+
+                        window.location.href =
+                          `/company-observation-list?${params.toString()}`;
                       }}
                       className="mt-3 text-sm font-semibold text-blue-700 hover:underline"
                     >

@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState, type FormEvent, type DragEvent } from "react";
+import { Suspense, useEffect, useState, type FormEvent, type DragEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import imageCompression from "browser-image-compression";
 
 type ObservationCategory = "Unsafe Act" | "Unsafe Condition" | "Near Miss";
 type ViolationCompany = "Thermax" | "Contractor";
@@ -171,16 +173,40 @@ function PhotoPicker({
   setFormMessage: (message: string) => void;
   setMessageType: (type: "success" | "error") => void;
 }) {
+  const [photoPreviews, setPhotoPreviews] = useState<
+    { file: File; url: string }[]
+  >([]);
+
+  useEffect(() => {
+    const previews = photos.map((file) => ({
+      file,
+      url: URL.createObjectURL(file),
+    }));
+
+    setPhotoPreviews(previews);
+
+    return () => {
+      previews.forEach((preview) => {
+        URL.revokeObjectURL(preview.url);
+      });
+    };
+  }, [photos]);
+
   function addPhotos(fileList: FileList | File[]) {
     const incoming = Array.from(fileList);
-    const images = incoming.filter((file) => file.type.startsWith("image/"));
+    const images = incoming.filter((file) =>
+      file.type.startsWith("image/")
+    );
+
     if (images.length !== incoming.length) {
       setMessageType("error");
       setFormMessage("Only image files can be attached.");
     } else {
       setFormMessage("");
     }
+
     const combined = [...photos, ...images];
+
     const unique = combined.filter(
       (file, index) =>
         combined.findIndex(
@@ -190,10 +216,12 @@ function PhotoPicker({
             item.lastModified === file.lastModified
         ) === index
     );
+
     if (unique.length > 10) {
       setMessageType("error");
       setFormMessage("You can attach a maximum of 10 photos.");
     }
+
     setPhotos(unique.slice(0, 10));
   }
 
@@ -208,56 +236,153 @@ function PhotoPicker({
       <label htmlFor={id} className={labelClass}>
         Attach Photos <span className="text-red-600">*</span>
       </label>
+
       <div
-        onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }}
-        onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }}
-        onDragLeave={(event) => { event.preventDefault(); setIsDragging(false); }}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setIsDragging(false);
+        }}
         onDrop={onDrop}
         className={`rounded-xl border-2 border-dashed p-6 text-center transition ${
-          isDragging ? "border-blue-600 bg-blue-50" : "border-slate-300 bg-slate-50"
+          isDragging
+            ? "border-blue-600 bg-blue-50"
+            : "border-slate-300 bg-slate-50"
         }`}
       >
         <p className="mb-3 text-sm text-slate-600">
-          Select/Drag and Drop Attachment. At least one photo is required; maximum 10 images.
+          Select/Drag and Drop Attachment. At least one photo is required;
+          maximum 10 images.
         </p>
+
         <input
           id={id}
           type="file"
           accept="image/*"
           multiple
           onChange={(event) => {
-            if (event.target.files) addPhotos(event.target.files);
+            if (event.target.files) {
+              addPhotos(event.target.files);
+            }
             event.target.value = "";
           }}
           className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-700 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-blue-800"
         />
       </div>
+
       {photos.length > 0 && (
-        <ul className="mt-3 space-y-2">
-          {photos.map((file, index) => (
-            <li key={`${file.name}-${file.size}-${file.lastModified}`} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 text-sm">
-              <span className="break-all">{file.name}</span>
-              <button
-                type="button"
-                onClick={() => setPhotos(photos.filter((_, i) => i !== index))}
-                className="shrink-0 font-semibold text-red-700 hover:underline"
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {photos.map((file, index) => {
+            const preview = photoPreviews.find(
+              (item) => item.file === file
+            );
+
+            return (
+              <div
+                key={`${file.name}-${file.size}-${file.lastModified}`}
+                className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
               >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
+                {preview && (
+                  <div className="flex h-52 items-center justify-center bg-slate-100 p-2">
+                    <img
+                      src={preview.url}
+                      alt={`Observation photo ${index + 1}`}
+                      className="h-full w-full rounded-lg object-contain"
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-3 p-3">
+                  <div className="min-w-0">
+                    <p className="break-all text-sm font-medium text-slate-800">
+                      {file.name}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {(file.size / 1024).toFixed(1)} KB
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPhotos(
+                        photos.filter((_, i) => i !== index)
+                      )
+                    }
+                    className="shrink-0 rounded-lg px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
 }
+const MAX_PHOTO_SIZE = 60 * 1024; // 60 KB
 
-export default function ObservationPortalPage() {
+async function compressObservationPhoto(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Please select a valid image file.");
+  }
+
+  const attempts = [
+  { width: 1200, quality: 0.6 },
+  { width: 900, quality: 0.4 },
+  { width: 700, quality: 0.3 },
+  { width: 500, quality: 0.2 },
+  { width: 350, quality: 0.15 },
+  { width: 250, quality: 0.1 },
+  { width: 180, quality: 0.08 },
+  { width: 120, quality: 0.05 },
+  ];
+
+  for (const attempt of attempts) {
+    const compressedFile = await imageCompression(file, {
+      maxSizeMB: 60 / 1024,
+      maxWidthOrHeight: attempt.width,
+      initialQuality: attempt.quality,
+      fileType: "image/jpeg",
+      useWebWorker: true,
+    });
+
+    if (compressedFile.size <= MAX_PHOTO_SIZE) {
+      return new File(
+        [compressedFile],
+        `observation-${Date.now()}.jpg`,
+        {
+          type: "image/jpeg",
+          lastModified: Date.now(),
+        }
+      );
+    }
+  }
+
+  throw new Error(
+    "Photo could not be compressed below 60 KB. Please select another photo."
+  );
+}
+function ObservationPortalContent() {
   const [selectedCategory, setSelectedCategory] = useState<ObservationCategory | "">("");
-
+const [siteCode, setSiteCode] = useState("");
+const searchParams = useSearchParams();
   // Unsafe Act state
   const [violationCompany, setViolationCompany] = useState<ViolationCompany | "">("");
   const [contractorName, setContractorName] = useState("");
+  const [siteCompanies, setSiteCompanies] = useState<
+  { id: string; company_name: string; company_code: string }[]
+>([]);
+const [companiesLoading, setCompaniesLoading] = useState(false);
   const [personType, setPersonType] = useState<PersonType | "">("");
   const [violatorName, setViolatorName] = useState("");
   const [observerName, setObserverName] = useState("");
@@ -323,6 +448,101 @@ useEffect(() => {
 }, []);
   const [formMessage, setFormMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">("error");
+// Verify selected Site Code
+useEffect(() => {
+  const selectedSiteCode = searchParams.get("siteCode")?.trim().toUpperCase();
+
+  if (!selectedSiteCode) {
+    setSiteCode("");
+    return;
+  }
+
+  let cancelled = false;
+
+  async function loadSiteCode() {
+    const supabase = createClient();
+
+    const { data, error } = await supabase
+      .from("sites")
+      .select("site_code")
+      .eq("site_code", selectedSiteCode)
+      .maybeSingle();
+
+    if (cancelled) return;
+
+    if (error || !data) {
+      setSiteCode("");
+      setMessageType("error");
+      setFormMessage(
+        "Selected site code could not be verified. Please go back and select the site again."
+      );
+      return;
+    }
+
+    setSiteCode(data.site_code);
+  }
+
+  loadSiteCode();
+
+  return () => {
+    cancelled = true;
+  };
+}, [searchParams]);
+
+
+// Load Registered Companies for selected Site
+useEffect(() => {
+  if (!siteCode) {
+    setSiteCompanies([]);
+    return;
+  }
+
+  let cancelled = false;
+
+  async function loadSiteCompanies() {
+    setCompaniesLoading(true);
+
+    const supabase = createClient();
+
+    const { data: site, error: siteError } = await supabase
+      .from("sites")
+      .select("id")
+      .eq("site_code", siteCode)
+      .maybeSingle();
+
+    if (siteError || !site) {
+      if (!cancelled) {
+        setSiteCompanies([]);
+        setCompaniesLoading(false);
+      }
+      return;
+    }
+
+    const { data: companies, error: companyError } = await supabase
+      .from("companies")
+      .select("id, company_name, company_code")
+      .eq("site_id", site.id)
+      .eq("is_active", true)
+      .order("company_name");
+
+    if (cancelled) return;
+
+    if (companyError) {
+      console.error("Company loading error:", companyError);
+      setSiteCompanies([]);
+    } else {
+      setSiteCompanies(companies || []);
+    }
+
+    setCompaniesLoading(false);
+  }
+
+  loadSiteCompanies();
+
+  return () => {
+    cancelled = true;
+  };
+}, [siteCode]);
 
   function resetUnsafeActForm() {
     setViolationCompany(""); setContractorName(""); setPersonType("");
@@ -369,7 +589,7 @@ useEffect(() => {
       resetForm();
       return;
     }
-    window.location.href = "/";
+    window.history.back();
   }
 
   function handleNumberChange(value: string, setter: (value: string) => void) {
@@ -378,78 +598,399 @@ useEffect(() => {
     }
   }
 
-  function handleSaveUnsafeAct(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFormMessage("");
-    if (
-      !violationCompany ||
-      (violationCompany === "Contractor" && !contractorName.trim()) ||
-      !personType || !violatorName.trim() || !observerName.trim() ||
-      !observationDate || !location.trim() || !atRiskBehaviourDescription.trim() ||
-      !behaviourCategory
-    ) {
-      setMessageType("error"); setFormMessage("Please complete all required fields."); return;
-    }
-    if (peopleWorkingCorrectly === "" || peopleShowingWrongBehaviour === "" || peopleGivenSpotCorrection === "") {
-      setMessageType("error"); setFormMessage("Please enter all three people counts."); return;
-    }
-    const correctCount = Number(peopleWorkingCorrectly);
-    const wrongCount = Number(peopleShowingWrongBehaviour);
-    const spotCount = Number(peopleGivenSpotCorrection);
-    if (
-      !Number.isSafeInteger(correctCount) || !Number.isSafeInteger(wrongCount) ||
-      !Number.isSafeInteger(spotCount) || correctCount < 0 || wrongCount < 0 || spotCount < 0
-    ) {
-      setMessageType("error"); setFormMessage("Please enter valid non-negative whole numbers."); return;
-    }
-    if (spotCount > wrongCount) {
-      setMessageType("error");
-      setFormMessage("People Given Spot Correction cannot be greater than People Showing Wrong Behaviour.");
-      return;
-    }
-    if (spotCount !== wrongCount) {
-      setMessageType("error");
-      setFormMessage("All people showing wrong behaviour must receive spot correction before the observation can be saved. Observation Status is Open.");
-      return;
-    }
-    setMessageType("success");
-    setFormMessage("Validation successful. Observation Status: Closed. Supabase is not connected yet, so this observation has NOT been saved. Your form data has been kept.");
+async function handleSaveUnsafeAct(event: FormEvent<HTMLFormElement>) {
+  event.preventDefault();
+  setFormMessage("");
+
+  // Required-field validation
+  if (
+    !violationCompany ||
+    !siteCode.trim() ||
+    (violationCompany === "Contractor" && !contractorName.trim()) ||
+    !personType ||
+    !violatorName.trim() ||
+    !observerName.trim() ||
+    !observationDate ||
+    !location.trim() ||
+    !atRiskBehaviourDescription.trim() ||
+    !behaviourCategory
+  ) {
+    setMessageType("error");
+    setFormMessage("Please complete all required fields.");
+    return;
   }
 
-  function handleSaveUnsafeCondition(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setFormMessage("");
-    if (
-      !conditionDescription.trim() || !conditionDate || !responsiblePerson.trim() ||
-      !conditionLocation.trim() || !reportingPerson.trim() || !observerCompanyName.trim() ||
-      !conditionCategory || !conditionSubCategory || !hazardClass ||
-      !leadingActivity.trim() || !recommendations.trim() || !siteIncharge.trim()
-    ) {
-      setMessageType("error"); setFormMessage("Please complete all required fields."); return;
-    }
-    if (conditionPhotos.length === 0) {
-      setMessageType("error"); setFormMessage("Please attach at least one Unsafe Condition photo. Photo is mandatory."); return;
-    }
-    setMessageType("success");
-    setFormMessage("Validation successful. Status: Open. Supabase is not connected yet, so this observation has NOT been saved. Your form data and selected photos remain on this page.");
+  // Count validation
+  if (
+    peopleWorkingCorrectly === "" ||
+    peopleShowingWrongBehaviour === "" ||
+    peopleGivenSpotCorrection === ""
+  ) {
+    setMessageType("error");
+    setFormMessage("Please enter all three people counts.");
+    return;
   }
 
-  function handleSaveNearMiss(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setFormMessage("");
-    if (
-      !nearMissDescription.trim() || !nearMissLocation.trim() || !nearMissDate ||
-      !nearMissResponsiblePerson.trim() || !nearMissCompanyName.trim() ||
-      !nearMissObserverName.trim() || !nearMissUnsafeType || !nearMissCategory ||
-      !nearMissSubCategory || !nearMissHazardClass || !nearMissLeadingActivity.trim() ||
-      !nearMissRootCause || !nearMissSiteIncharge.trim()
-    ) {
-      setMessageType("error"); setFormMessage("Please complete all required fields."); return;
-    }
-    if (nearMissPhotos.length === 0) {
-      setMessageType("error"); setFormMessage("Please attach at least one Near Miss photo. Photo is mandatory."); return;
-    }
-    setMessageType("success");
-    setFormMessage("Validation successful. Near Miss Status: Open. Supabase is not connected yet, so this observation has NOT been saved. Your form data and selected photos remain on this page.");
+  const correctCount = Number(peopleWorkingCorrectly);
+  const wrongCount = Number(peopleShowingWrongBehaviour);
+  const spotCount = Number(peopleGivenSpotCorrection);
+
+  if (
+    !Number.isSafeInteger(correctCount) ||
+    !Number.isSafeInteger(wrongCount) ||
+    !Number.isSafeInteger(spotCount) ||
+    correctCount < 0 ||
+    wrongCount < 0 ||
+    spotCount < 0
+  ) {
+    setMessageType("error");
+    setFormMessage("Please enter valid non-negative whole numbers.");
+    return;
   }
+
+  if (spotCount > wrongCount) {
+    setMessageType("error");
+    setFormMessage(
+      "People Given Spot Correction cannot be greater than People Showing Wrong Behaviour."
+    );
+    return;
+  }
+
+  if (spotCount !== wrongCount) {
+    setMessageType("error");
+    setFormMessage(
+      "All people showing wrong behaviour must receive spot correction before the observation can be saved."
+    );
+    return;
+  }
+
+  // Save to Supabase
+  setMessageType("error");
+  setFormMessage("Saving observation...");
+
+  try {
+    const supabase = createClient();
+
+const companyName =
+  violationCompany === "Contractor"
+    ? contractorName.trim()
+    : violationCompany;
+
+const selectedContractor = siteCompanies.find(
+  (company) => company.company_name === contractorName
+);
+
+const companyCode =
+  violationCompany === "Contractor"
+    ? selectedContractor?.company_code ?? null
+    : null;
+
+    const { error } = await supabase
+      .from("observations")
+      .insert({
+        category: "Unsafe Act",
+        site_code: siteCode,
+        observation_date: observationDate,
+        submitted_by: observerName.trim(),
+        description: atRiskBehaviourDescription.trim(),
+        status: "Close",
+
+        violation_company: violationCompany,
+        company_code: companyCode,
+        contractor_name:
+          violationCompany === "Contractor"
+            ? contractorName.trim()
+            : null,
+        person_type: personType,
+        violator_name: violatorName.trim(),
+        observer_name: observerName.trim(),
+        unsafe_act_location: location.trim(),
+
+        people_count: correctCount,
+        wrong_behaviour_count: wrongCount,
+        spot_correction_count: spotCount,
+
+        behaviour_category: behaviourCategory,
+        violation_type: violationType || null,
+        violation_sub_classification: subClassification || null,
+      });
+
+    if (error) {
+      console.error("Unsafe Act save error:", error);
+      setMessageType("error");
+      setFormMessage(
+        `Could not save observation: ${error.message}`
+      );
+      return;
+    }
+
+    setMessageType("success");
+    resetUnsafeActForm();
+
+    setFormMessage(
+      "Unsafe Act observation saved successfully. Status: Close."
+    );
+  } catch (error) {
+    console.error("Unexpected save error:", error);
+    setMessageType("error");
+    setFormMessage(
+      "An unexpected error occurred while saving. Please try again."
+    );
+  }
+}
+
+  async function handleSaveUnsafeCondition(
+  event: FormEvent<HTMLFormElement>
+) {
+  event.preventDefault();
+  setFormMessage("");
+
+  // Validate required fields
+  if (
+    !siteCode.trim() ||
+    !conditionDescription.trim() ||
+    !conditionDate ||
+    !responsiblePerson.trim() ||
+    !conditionLocation.trim() ||
+    !reportingPerson.trim() ||
+    !observerCompanyName.trim() ||
+    !conditionCategory ||
+    !conditionSubCategory ||
+    !hazardClass ||
+    !leadingActivity.trim() ||
+    !recommendations.trim() ||
+    !siteIncharge.trim()
+  ) {
+    setMessageType("error");
+    setFormMessage("Please complete all required fields.");
+    return;
+  }
+
+  // Photo is mandatory
+  if (conditionPhotos.length === 0) {
+    setMessageType("error");
+    setFormMessage(
+      "Please attach at least one Unsafe Condition photo. Photo is mandatory."
+    );
+    return;
+  }
+
+  try {
+    setMessageType("error");
+    setFormMessage("Saving Unsafe Condition observation...");
+
+    const supabase = createClient();
+
+const selectedObserverCompany = siteCompanies.find(
+  (company) => company.company_name === observerCompanyName
+);
+
+const companyCode = selectedObserverCompany?.company_code ?? null;
+
+    const uploadedPhotoPaths: string[] = [];
+
+    // Upload photos to the private Supabase Storage bucket
+    for (const photo of conditionPhotos) {
+      const safeFileName = photo.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const filePath =
+        `${siteCode.trim().toUpperCase()}/unsafe-condition/` +
+        `${Date.now()}-${Math.random().toString(36).slice(2)}-${safeFileName}`;
+const compressedFile = await compressObservationPhoto(photo);
+
+      const { data, error: uploadError } = await supabase.storage
+        .from("observation-photos")
+        .upload(filePath, compressedFile, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error(
+          `Photo upload failed: ${uploadError.message}`
+        );
+      }
+
+      uploadedPhotoPaths.push(data.path);
+    }
+
+    // Save observation details in Supabase
+    const { error: saveError } = await supabase
+  .from("observations")
+  .insert({
+    category: "Unsafe Condition",
+    site_code: siteCode.trim().toUpperCase(),
+    observation_date: conditionDate,
+    submitted_by: reportingPerson.trim(),
+    description: conditionDescription.trim(),
+    status: "Open",
+
+    reporting_person: reportingPerson.trim(),
+    responsible_person: responsiblePerson.trim(),
+    unsafe_condition_location: conditionLocation.trim(),
+    observer_company: observerCompanyName.trim(),
+    company_code: companyCode,
+    unsafe_condition_category: conditionCategory,
+    unsafe_condition_sub_category: conditionSubCategory,
+    unsafe_condition_hazard_class: hazardClass,
+    unsafe_condition_leading_activity: leadingActivity.trim(),
+    closure_recommendations: recommendations.trim(),
+    site_incharge: siteIncharge.trim(),
+
+    photo_urls: uploadedPhotoPaths,
+  });
+
+    if (saveError) {
+      throw new Error(`Database save failed: ${saveError.message}`);
+    }
+
+    // Reset form only after a successful database save
+    resetUnsafeConditionForm();
+    
+
+    setMessageType("success");
+    setFormMessage(
+      "Unsafe Condition observation saved successfully."
+    );
+  } catch (error) {
+    console.error("Unsafe Condition save error:", error);
+
+    setMessageType("error");
+    setFormMessage(
+      error instanceof Error
+        ? error.message
+        : "Unable to save the observation. Your form data has been retained."
+    );
+  }
+}
+
+  async function handleSaveNearMiss(
+  event: FormEvent<HTMLFormElement>
+) {
+  event.preventDefault();
+  setFormMessage("");
+
+  if (
+    !siteCode.trim() ||
+    !nearMissDescription.trim() ||
+    !nearMissLocation.trim() ||
+    !nearMissDate ||
+    !nearMissResponsiblePerson.trim() ||
+    !nearMissCompanyName.trim() ||
+    !nearMissObserverName.trim() ||
+    !nearMissUnsafeType ||
+    !nearMissCategory ||
+    !nearMissSubCategory ||
+    !nearMissHazardClass ||
+    !nearMissLeadingActivity.trim() ||
+    !nearMissRootCause ||
+    !nearMissSiteIncharge.trim()
+  ) {
+    setMessageType("error");
+    setFormMessage("Please complete all required fields.");
+    return;
+  }
+
+  if (nearMissPhotos.length === 0) {
+    setMessageType("error");
+    setFormMessage(
+      "Please attach at least one Near Miss photo. Photo is mandatory."
+    );
+    return;
+  }
+
+  try {
+    setMessageType("error");
+    setFormMessage("Saving Near Miss observation...");
+
+    const supabase = createClient();
+
+const selectedNearMissCompany = siteCompanies.find(
+  (company) => company.company_name === nearMissCompanyName
+);
+
+const companyCode = selectedNearMissCompany?.company_code ?? null;
+
+const uploadedPhotoPaths: string[] = [];
+
+    // Upload selected photos to private Supabase Storage
+    for (const photo of nearMissPhotos) {
+      const safeFileName = photo.name.replace(
+        /[^a-zA-Z0-9._-]/g,
+        "_"
+      );
+
+      const filePath =
+        `${siteCode.trim().toUpperCase()}/near-miss/` +
+        `${Date.now()}-${Math.random().toString(36).slice(2)}-${safeFileName}`;
+const compressedFile = await compressObservationPhoto(photo);
+      const { data, error: uploadError } = await supabase.storage
+        .from("observation-photos")
+        .upload(filePath, compressedFile, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error(
+          `Photo upload failed: ${uploadError.message}`
+        );
+      }
+
+      uploadedPhotoPaths.push(data.path);
+    }
+
+    const { error: saveError } = await supabase
+  .from("observations")
+  .insert({
+    category: "Near Miss",
+    site_code: siteCode.trim().toUpperCase(),
+    observation_date: nearMissDate,
+    submitted_by: nearMissObserverName.trim(),
+    description: nearMissDescription.trim(),
+    status: "Open",
+
+    near_miss_location: nearMissLocation.trim(),
+    near_miss_responsible_person: nearMissResponsiblePerson.trim(),
+    near_miss_company_name: nearMissCompanyName.trim(),
+    company_code: companyCode,
+    near_miss_observer_name: nearMissObserverName.trim(),
+    near_miss_unsafe_type: nearMissUnsafeType,
+    near_miss_category: nearMissCategory,
+    near_miss_sub_category: nearMissSubCategory,
+    near_miss_hazard_class: nearMissHazardClass,
+    near_miss_leading_activity: nearMissLeadingActivity.trim(),
+    near_miss_root_cause: nearMissRootCause,
+    near_miss_root_cause_sub_category:
+      nearMissRootCauseSubCategory || null,
+    near_miss_site_incharge: nearMissSiteIncharge.trim(),
+
+    photo_urls: uploadedPhotoPaths,
+  });
+
+    if (saveError) {
+      throw new Error(
+        `Database save failed: ${saveError.message}`
+      );
+    }
+
+    resetNearMissForm();
+    
+
+    setMessageType("success");
+    setFormMessage(
+      "Near Miss observation saved successfully."
+    );
+  } catch (error) {
+    console.error("Near Miss save error:", error);
+
+    setMessageType("error");
+    setFormMessage(
+      error instanceof Error
+        ? error.message
+        : "Unable to save Near Miss. Your form data has been retained."
+    );
+  }
+}
 
   const wrongCount = peopleShowingWrongBehaviour === "" ? null : Number(peopleShowingWrongBehaviour);
   const spotCount = peopleGivenSpotCorrection === "" ? null : Number(peopleGivenSpotCorrection);
@@ -463,8 +1004,8 @@ useEffect(() => {
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-8 sm:py-12">
-      <div className="mx-auto max-w-3xl">
-        <header className="mb-8 text-center">
+  <div className="relative mx-auto max-w-3xl">
+    <header className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-700 text-3xl text-white shadow-lg">🦺</div>
           <h1 className="text-3xl font-bold text-slate-900">Observation</h1>
           <p className="mt-2 text-sm text-slate-600">Identify hazards. Report unsafe behaviour. Prevent incidents.</p>
@@ -490,18 +1031,65 @@ useEffect(() => {
 
         {selectedCategory === "Unsafe Act" && (
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg sm:p-8">
-            <div className="mb-6 border-b border-slate-200 pb-5">
-              <p className="text-sm font-semibold uppercase tracking-wide text-red-700">Selected Category: Unsafe Act</p>
-              <h2 className="mt-1 text-2xl font-bold text-slate-900">Unsafe Act Observation Details</h2>
-              <p className="mt-2 text-sm text-slate-600">Enter the details of the unsafe act observed.</p>
-            </div>
+            <div className="mb-6 flex items-start justify-between gap-4 border-b border-slate-200 pb-5">
+  <div className="min-w-0">
+    <p className="text-sm font-semibold uppercase tracking-wide text-red-700">
+      Selected Category: Unsafe Act
+    </p>
+    <h2 className="mt-1 text-2xl font-bold text-slate-900">
+      Unsafe Act Observation Details
+    </h2>
+    <p className="mt-2 text-sm text-slate-600">
+      Enter the details of the unsafe act observed.
+    </p>
+  </div>
+
+  <div className="flex h-20 w-20 shrink-0 items-center justify-center">
+    <img
+      src="/thermax-logo.png"
+      alt="Thermax Logo"
+      className="h-full w-full object-contain"
+    />
+  </div>
+</div>
             <form onSubmit={handleSaveUnsafeAct} className="space-y-5">
+              <div>
+  <label htmlFor="siteCode" className={labelClass}>
+    Site Code <span className="text-red-600">*</span>
+  </label>
+  <input
+  id="siteCode"
+  type="text"
+  value={siteCode}
+  readOnly
+  placeholder="Loading Site Code..."
+  required
+  className={`${inputClass} cursor-not-allowed bg-slate-100 font-semibold text-slate-700`}
+/>
+</div>
               <div><label htmlFor="violationCompany" className={labelClass}>Violation Company <span className="text-red-600">*</span></label>
                 <select id="violationCompany" value={violationCompany} onChange={(event) => handleCompanySelect(event.target.value as ViolationCompany | "")} required className={inputClass}>
                   <option value="">Select Company</option><option value="Thermax">Thermax</option><option value="Contractor">Contractor</option>
                 </select>
               </div>
-              {violationCompany === "Contractor" && <div><label htmlFor="contractorName" className={labelClass}>Name of Contractor <span className="text-red-600">*</span></label><input id="contractorName" value={contractorName} onChange={(event) => setContractorName(event.target.value)} placeholder="Enter contractor company name" maxLength={150} required className={inputClass} /></div>}
+              {violationCompany === "Contractor" && <div><label htmlFor="contractorName" className={labelClass}>Name of Contractor <span className="text-red-600">*</span></label><select
+  id="contractorName"
+  value={contractorName}
+  onChange={(event) => setContractorName(event.target.value)}
+  required
+  className={inputClass}
+  disabled={companiesLoading}
+>
+  <option value="">
+    {companiesLoading ? "Loading companies..." : "Select Contractor Company"}
+  </option>
+
+  {siteCompanies.map((company) => (
+    <option key={company.id} value={company.company_name}>
+      {company.company_name}
+    </option>
+  ))}
+</select></div>}
               {violationCompany && <div><label htmlFor="personType" className={labelClass}>Person Type <span className="text-red-600">*</span></label><select id="personType" value={personType} onChange={(event) => { setPersonType(event.target.value as PersonType | ""); setViolatorName(""); }} required className={inputClass}><option value="">Select Person Type</option><option value="Employee">Employee</option><option value="Worker">Worker</option></select></div>}
               <div><label htmlFor="violatorName" className={labelClass}>Violator Name <span className="text-red-600">*</span></label><input id="violatorName" value={violatorName} onChange={(event) => setViolatorName(event.target.value)} placeholder="Enter the name of the person who committed the violation" maxLength={150} required className={inputClass} /></div>
               <div><label htmlFor="observerName" className={labelClass}>Observer Name <span className="text-red-600">*</span></label><input id="observerName" value={observerName} onChange={(event) => setObserverName(event.target.value)} placeholder="Enter the name of the person who observed the violation" maxLength={150} required className={inputClass} /></div>
@@ -528,14 +1116,66 @@ useEffect(() => {
 
         {selectedCategory === "Unsafe Condition" && (
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg sm:p-8">
-            <div className="mb-6 border-b border-slate-200 pb-5"><p className="text-sm font-semibold uppercase tracking-wide text-amber-700">Selected Category: Unsafe Condition</p><h2 className="mt-1 text-2xl font-bold text-slate-900">Unsafe Condition Observation Details</h2><p className="mt-2 text-sm text-slate-600">Enter the details of the unsafe condition observed.</p></div>
+            <div className="mb-6 flex items-start justify-between gap-4 border-b border-slate-200 pb-5">
+  <div className="min-w-0">
+    <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
+      Selected Category: Unsafe Condition
+    </p>
+    <h2 className="mt-1 text-2xl font-bold text-slate-900">
+      Unsafe Condition Observation Details
+    </h2>
+    <p className="mt-2 text-sm text-slate-600">
+      Enter the details of the unsafe condition observed.
+    </p>
+  </div>
+
+  <div className="flex h-20 w-20 shrink-0 items-center justify-center">
+    <img
+      src="/thermax-logo.png"
+      alt="Thermax Logo"
+      className="h-full w-full object-contain"
+    />
+  </div>
+</div>
             <form onSubmit={handleSaveUnsafeCondition} className="space-y-5">
+              <div>
+  <label htmlFor="siteCode" className={labelClass}>
+    Site Code <span className="text-red-600">*</span>
+  </label>
+
+  <input
+  id="siteCode"
+  type="text"
+  value={siteCode}
+  readOnly
+  placeholder="Loading Site Code..."
+  required
+  className={`${inputClass} cursor-not-allowed bg-slate-100 font-semibold text-slate-700`}
+/>
+</div>
               <div><label htmlFor="conditionDescription" className={labelClass}>Unsafe Condition Description <span className="text-red-600">*</span></label><textarea id="conditionDescription" value={conditionDescription} onChange={(event) => setConditionDescription(event.target.value)} rows={4} maxLength={5000} required placeholder="Describe the unsafe condition..." className={`${inputClass} resize-y`} /></div>
               <div><label htmlFor="conditionDate" className={labelClass}>Unsafe Condition Occurred Date <span className="text-red-600">*</span></label><input id="conditionDate" type="date" value={conditionDate} min={minAllowed} max={today} onChange={(event) => setConditionDate(event.target.value)} required className={inputClass} /></div>
               <div><label htmlFor="responsiblePerson" className={labelClass}>Responsible Person to take Immediate Actions <span className="text-red-600">*</span></label><input id="responsiblePerson" value={responsiblePerson} onChange={(event) => setResponsiblePerson(event.target.value)} maxLength={200} required className={inputClass} /></div>
               <div><label htmlFor="conditionLocation" className={labelClass}>Location of Unsafe Condition <span className="text-red-600">*</span></label><input id="conditionLocation" value={conditionLocation} onChange={(event) => setConditionLocation(event.target.value)} maxLength={250} required className={inputClass} /></div>
               <div><label htmlFor="reportingPerson" className={labelClass}>Person Reporting Unsafe Condition <span className="text-red-600">*</span></label><input id="reportingPerson" value={reportingPerson} onChange={(event) => setReportingPerson(event.target.value)} maxLength={150} required className={inputClass} /></div>
-              <div><label htmlFor="observerCompanyName" className={labelClass}>Unsafe Condition Observer company Name <span className="text-red-600">*</span></label><input id="observerCompanyName" value={observerCompanyName} onChange={(event) => setObserverCompanyName(event.target.value)} maxLength={200} required className={inputClass} /></div>
+              <div><label htmlFor="observerCompanyName" className={labelClass}>Unsafe Condition Observer company Name <span className="text-red-600">*</span></label><select
+  id="observerCompanyName"
+  value={observerCompanyName}
+  onChange={(event) => setObserverCompanyName(event.target.value)}
+  required
+  className={inputClass}
+  disabled={companiesLoading}
+>
+  <option value="">
+    {companiesLoading ? "Loading companies..." : "Select Company"}
+  </option>
+
+  {siteCompanies.map((company) => (
+    <option key={company.id} value={company.company_name}>
+      {company.company_name}
+    </option>
+  ))}
+</select></div>
               <div><label htmlFor="conditionCategory" className={labelClass}>Unsafe Condition Category <span className="text-red-600">*</span></label><select id="conditionCategory" value={conditionCategory} onChange={(event) => { setConditionCategory(event.target.value); setConditionSubCategory(""); setFormMessage(""); }} required className={inputClass}><option value="">Select Category</option>{unsafeConditionCategories.map((option) => <option key={option} value={option}>{option}</option>)}</select></div>
               <div><label htmlFor="conditionSubCategory" className={labelClass}>Unsafe Condition Sub-Category <span className="text-red-600">*</span></label><select id="conditionSubCategory" value={conditionSubCategory} onChange={(event) => setConditionSubCategory(event.target.value)} disabled={!conditionCategory} required className={`${inputClass} disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500`}><option value="">{conditionCategory ? "Select Sub-Category" : "Select Category First"}</option>{availableConditionSubCategories.map((option) => <option key={option} value={option}>{option}</option>)}</select></div>
               <div><label htmlFor="hazardClass" className={labelClass}>Unsafe Condition Hazard Class <span className="text-red-600">*</span></label><select id="hazardClass" value={hazardClass} onChange={(event) => setHazardClass(event.target.value)} required className={inputClass}><option value="">Select Hazard Class</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option></select></div>
@@ -551,13 +1191,65 @@ useEffect(() => {
 
         {selectedCategory === "Near Miss" && (
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg sm:p-8">
-            <div className="mb-6 border-b border-slate-200 pb-5"><p className="text-sm font-semibold uppercase tracking-wide text-blue-700">Selected Category: Near Miss</p><h2 className="mt-1 text-2xl font-bold text-slate-900">Near Miss Observation Details</h2><p className="mt-2 text-sm text-slate-600">Report an incident or event that almost happened.</p></div>
+            <div className="mb-6 flex items-start justify-between gap-4 border-b border-slate-200 pb-5">
+  <div className="min-w-0">
+    <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
+      Selected Category: Near Miss
+    </p>
+    <h2 className="mt-1 text-2xl font-bold text-slate-900">
+      Near Miss Observation Details
+    </h2>
+    <p className="mt-2 text-sm text-slate-600">
+      Report an incident or event that almost happened.
+    </p>
+  </div>
+
+  <div className="flex h-20 w-20 shrink-0 items-center justify-center">
+    <img
+      src="/thermax-logo.png"
+      alt="Thermax Logo"
+      className="h-full w-full object-contain"
+    />
+  </div>
+</div>
             <form onSubmit={handleSaveNearMiss} className="space-y-5">
+              <div>
+  <label htmlFor="siteCode" className={labelClass}>
+    Site Code <span className="text-red-600">*</span>
+  </label>
+
+  <input
+  id="siteCode"
+  type="text"
+  value={siteCode}
+  readOnly
+  placeholder="Loading Site Code..."
+  required
+  className={`${inputClass} cursor-not-allowed bg-slate-100 font-semibold text-slate-700`}
+/>
+</div>
               <div><label htmlFor="nearMissDescription" className={labelClass}>Near Miss Description <span className="text-red-600">*</span></label><textarea id="nearMissDescription" value={nearMissDescription} onChange={(event) => setNearMissDescription(event.target.value)} rows={4} maxLength={5000} required placeholder="Describe the near miss..." className={`${inputClass} resize-y`} /></div>
               <div><label htmlFor="nearMissLocation" className={labelClass}>Exact Location of Near Miss <span className="text-red-600">*</span></label><input id="nearMissLocation" value={nearMissLocation} onChange={(event) => setNearMissLocation(event.target.value)} maxLength={250} required className={inputClass} /></div>
               <div><label htmlFor="nearMissDate" className={labelClass}>Near Miss Occurred Date <span className="text-red-600">*</span></label><input id="nearMissDate" type="date" value={nearMissDate} min={minAllowed} max={today} onChange={(event) => setNearMissDate(event.target.value)} required className={inputClass} /></div>
               <div><label htmlFor="nearMissResponsiblePerson" className={labelClass}>Responsible Person to take Immediate Actions (Near Miss) <span className="text-red-600">*</span></label><input id="nearMissResponsiblePerson" value={nearMissResponsiblePerson} onChange={(event) => setNearMissResponsiblePerson(event.target.value)} maxLength={200} required className={inputClass} /></div>
-              <div><label htmlFor="nearMissCompanyName" className={labelClass}>Near Miss Happened Company Name <span className="text-red-600">*</span></label><input id="nearMissCompanyName" value={nearMissCompanyName} onChange={(event) => setNearMissCompanyName(event.target.value)} maxLength={200} required className={inputClass} /></div>
+              <div><label htmlFor="nearMissCompanyName" className={labelClass}>Near Miss Happened Company Name <span className="text-red-600">*</span></label><select
+  id="nearMissCompanyName"
+  value={nearMissCompanyName}
+  onChange={(event) => setNearMissCompanyName(event.target.value)}
+  required
+  className={inputClass}
+  disabled={companiesLoading}
+>
+  <option value="">
+    {companiesLoading ? "Loading companies..." : "Select Company"}
+  </option>
+
+  {siteCompanies.map((company) => (
+    <option key={company.id} value={company.company_name}>
+      {company.company_name}
+    </option>
+  ))}
+</select></div>
               <div><label htmlFor="nearMissObserverName" className={labelClass}>Near Miss Observer Name <span className="text-red-600">*</span></label><input id="nearMissObserverName" value={nearMissObserverName} onChange={(event) => setNearMissObserverName(event.target.value)} maxLength={150} required className={inputClass} /></div>
               <div><label htmlFor="nearMissUnsafeType" className={labelClass}>Unsafe Type <span className="text-red-600">*</span></label><select id="nearMissUnsafeType" value={nearMissUnsafeType} onChange={(event) => setNearMissUnsafeType(event.target.value)} required className={inputClass}><option value="">Select Unsafe Type</option><option value="Unsafe Act">Unsafe Act</option><option value="Unsafe Condition">Unsafe Condition</option></select></div>
               <div><label htmlFor="nearMissCategory" className={labelClass}>Near Miss Category <span className="text-red-600">*</span></label><select id="nearMissCategory" value={nearMissCategory} onChange={(event) => { setNearMissCategory(event.target.value); setNearMissSubCategory(""); setFormMessage(""); }} required className={inputClass}><option value="">Select Near Miss Category</option>{nearMissCategories.map((option) => <option key={option} value={option}>{option}</option>)}</select></div>
@@ -589,5 +1281,12 @@ useEffect(() => {
         <button type="button" onClick={handleBack} className="mt-5 w-full py-3 text-sm font-semibold text-blue-700 hover:underline">← {selectedCategory ? "Back to Select Category" : "Back to Home"}</button>
       </div>
     </main>
+  );
+}
+export default function ObservationPortalPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Loading Observation...</div>}>
+      <ObservationPortalContent />
+    </Suspense>
   );
 }

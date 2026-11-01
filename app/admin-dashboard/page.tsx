@@ -35,7 +35,7 @@ export default function AdminDashboard() {
         return;
       }
 
-      window.location.assign("/site-code");
+      window.location.assign("/admin-portal");
     } catch (error) {
       console.error("Login error:", error);
       setError("Unable to sign in. Please try again.");
