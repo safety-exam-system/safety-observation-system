@@ -39,5 +39,5 @@ export async function logout() {
 
   await supabase.auth.signOut();
 
-  redirect("/admin-dashboard");
+  redirect("/");
 }

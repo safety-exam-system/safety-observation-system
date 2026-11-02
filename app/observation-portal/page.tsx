@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState, type FormEvent, type DragEvent } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import imageCompression from "browser-image-compression";
 
@@ -373,6 +373,7 @@ async function compressObservationPhoto(file: File): Promise<File> {
   );
 }
 function ObservationPortalContent() {
+const router = useRouter();
   const [selectedCategory, setSelectedCategory] = useState<ObservationCategory | "">("");
 const [siteCode, setSiteCode] = useState("");
 const searchParams = useSearchParams();
@@ -584,13 +585,18 @@ useEffect(() => {
   }
 
   function handleBack() {
-    if (selectedCategory) {
-      setSelectedCategory("");
-      resetForm();
-      return;
-    }
-    window.history.back();
+  if (selectedCategory) {
+    setSelectedCategory("");
+    resetForm();
+    return;
   }
+
+  if (siteCode) {
+    router.push(`/site-portal?siteCode=${encodeURIComponent(siteCode)}`);
+  } else {
+    router.push("/site-portal");
+  }
+}
 
   function handleNumberChange(value: string, setter: (value: string) => void) {
     if (value === "" || /^\d+$/.test(value)) {

@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { logout } from "../actions/auth";
 
 type Site = {
   id: string;
@@ -436,6 +437,16 @@ const monthNames = [
       <div className="mx-auto max-w-4xl">
         {/* Dashboard Header */}
         <header className="mb-6 rounded-2xl bg-blue-800 p-6 text-white shadow-lg sm:p-8">
+          <div className="mb-4 flex justify-end">
+  <form action={logout}>
+    <button
+      type="submit"
+      className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+    >
+      Logout
+    </button>
+  </form>
+</div>
           <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-white text-3xl">
             🦺
           </div>

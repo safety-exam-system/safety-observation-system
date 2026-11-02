@@ -133,7 +133,12 @@ function CompanyObservationListContent() {
   const [selectedYear, setSelectedYear] = useState(initialYear);
   const [selectedMonth, setSelectedMonth] = useState(initialMonth);
   const [selectedStatus, setSelectedStatus] = useState(initialStatus);
-  const [searchName, setSearchName] = useState("");
+
+  // Search by the person who uploaded the observation.
+  const [searchUploadedBy, setSearchUploadedBy] = useState("");
+
+  // Search by the person involved in Unsafe Act only.
+  const [searchPersonInvolved, setSearchPersonInvolved] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -215,11 +220,11 @@ function CompanyObservationListContent() {
       if (observationError) throw observationError;
 
       // 4. Keep only observations belonging to this company.
-    const companyObservations: Observation[] = (
-  (observationData || []) as unknown as Observation[]
-).filter((observation) =>
-  matchesCompany(observation, currentCompany.company_name)
-);
+      const companyObservations: Observation[] = (
+        (observationData || []) as unknown as Observation[]
+      ).filter((observation) =>
+        matchesCompany(observation, currentCompany.company_name)
+      );
 
       setObservations(companyObservations);
     } catch (error) {
@@ -255,7 +260,8 @@ function CompanyObservationListContent() {
   );
 
   const filteredObservations = useMemo(() => {
-    const search = normalize(searchName);
+    const uploadedBySearch = normalize(searchUploadedBy);
+    const personInvolvedSearch = normalize(searchPersonInvolved);
 
     return observations.filter((item) => {
       const date = getObservationDate(item);
@@ -280,25 +286,24 @@ function CompanyObservationListContent() {
           isClosed(item.status)
         );
 
-      const names = [
-        item.submitted_by,
-        item.violator_name,
-        item.responsible_person,
-        item.reporting_person,
-        item.near_miss_responsible_person,
-        item.contractor_name,
-      ];
+      // Uploaded By search applies to all three categories.
+      const matchesUploadedBy =
+        !uploadedBySearch ||
+        normalize(item.submitted_by).includes(uploadedBySearch);
 
-      const matchesName =
-        !search ||
-        names.some((name) => normalize(name).includes(search));
+      // Person Involved search applies only to Unsafe Act.
+      const matchesPersonInvolved =
+        selectedCategory !== "Unsafe Act" ||
+        !personInvolvedSearch ||
+        normalize(item.violator_name).includes(personInvolvedSearch);
 
       return (
         matchesCategory &&
         matchesYear &&
         matchesMonth &&
         matchesStatus &&
-        matchesName
+        matchesUploadedBy &&
+        matchesPersonInvolved
       );
     });
   }, [
@@ -307,7 +312,8 @@ function CompanyObservationListContent() {
     selectedYear,
     selectedMonth,
     selectedStatus,
-    searchName,
+    searchUploadedBy,
+    searchPersonInvolved,
   ]);
 
   function openObservationDetails(item: Observation) {
@@ -338,7 +344,8 @@ function CompanyObservationListContent() {
     setSelectedYear("");
     setSelectedMonth("");
     setSelectedStatus("");
-    setSearchName("");
+    setSearchUploadedBy("");
+    setSearchPersonInvolved("");
   }
 
   const categoryIcon =
@@ -468,9 +475,15 @@ function CompanyObservationListContent() {
                   <select
                     id="category"
                     value={selectedCategory}
-                    onChange={(event) =>
-                      setSelectedCategory(event.target.value)
-                    }
+                    onChange={(event) => {
+                      const category = event.target.value;
+
+                      setSelectedCategory(category);
+
+                      if (category !== "Unsafe Act") {
+                        setSearchPersonInvolved("");
+                      }
+                    }}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-3 text-slate-800"
                   >
                     <option value="All">All Categories</option>
@@ -546,23 +559,49 @@ function CompanyObservationListContent() {
                   </select>
                 </div>
 
+                {/* Search by Uploaded By */}
                 <div className="sm:col-span-2">
                   <label
-                    htmlFor="name"
+                    htmlFor="uploadedBy"
                     className="mb-2 block text-sm font-medium text-slate-700"
                   >
-                    Search by Name
+                    Search by Uploaded By
                   </label>
 
                   <input
-                    id="name"
+                    id="uploadedBy"
                     type="text"
-                    value={searchName}
-                    onChange={(event) => setSearchName(event.target.value)}
-                    placeholder="Enter person's name"
+                    value={searchUploadedBy}
+                    onChange={(event) =>
+                      setSearchUploadedBy(event.target.value)
+                    }
+                    placeholder="Enter observer / uploader name"
                     className="w-full rounded-lg border border-slate-300 px-3 py-3 text-slate-800"
                   />
                 </div>
+
+                {/* Search by Person Involved - Unsafe Act only */}
+                {selectedCategory === "Unsafe Act" && (
+                  <div className="sm:col-span-2">
+                    <label
+                      htmlFor="personInvolved"
+                      className="mb-2 block text-sm font-medium text-slate-700"
+                    >
+                      Search by Person Involved
+                    </label>
+
+                    <input
+                      id="personInvolved"
+                      type="text"
+                      value={searchPersonInvolved}
+                      onChange={(event) =>
+                        setSearchPersonInvolved(event.target.value)
+                      }
+                      placeholder="Enter person involved name"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-3 text-slate-800"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="mt-4 flex flex-col gap-3 sm:flex-row">
@@ -631,6 +670,13 @@ function CompanyObservationListContent() {
                           <p className="mt-1 text-sm text-slate-500">
                             Date: {item.observation_date || "Not available"}
                           </p>
+
+                          {item.category === "Unsafe Act" &&
+                            item.violator_name && (
+                              <p className="mt-2 text-sm font-medium text-slate-700">
+                                Person Involved: {item.violator_name}
+                              </p>
+                            )}
 
                           {item.site_code && (
                             <p className="mt-1 text-sm text-slate-500">

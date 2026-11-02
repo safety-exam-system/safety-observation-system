@@ -1,10 +1,6 @@
 "use client";
 
-import { useState } from "react";
-
 export default function Home() {
-  const [showOptions, setShowOptions] = useState(false);
-
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-10 font-sans text-slate-900 sm:px-8">
       <div className="mx-auto flex min-h-[80vh] max-w-4xl flex-col items-center justify-center">
@@ -26,7 +22,7 @@ export default function Home() {
           <button
             type="button"
             onClick={() => {
-              window.location.href = "/site-selection";
+              window.location.href = "/login";
             }}
             className="mx-auto flex min-h-14 w-full max-w-md items-center justify-center rounded-xl bg-blue-700 px-6 py-4 text-lg font-semibold text-white transition hover:bg-blue-800"
           >
