@@ -374,9 +374,10 @@ async function compressObservationPhoto(file: File): Promise<File> {
 }
 function ObservationPortalContent() {
 const router = useRouter();
-  const [selectedCategory, setSelectedCategory] = useState<ObservationCategory | "">("");
+const [selectedCategory, setSelectedCategory] = useState<ObservationCategory | "">("");
 const [siteCode, setSiteCode] = useState("");
 const searchParams = useSearchParams();
+const isWorkerMode = searchParams.get("mode") === "worker";
   // Unsafe Act state
   const [violationCompany, setViolationCompany] = useState<ViolationCompany | "">("");
   const [contractorName, setContractorName] = useState("");
@@ -461,17 +462,16 @@ useEffect(() => {
   let cancelled = false;
 
   async function loadSiteCode() {
-    const supabase = createClient();
+  try {
+    const response = await fetch(
+      `/api/worker/site?siteCode=${encodeURIComponent(selectedSiteCode??"")}`
+    );
 
-    const { data, error } = await supabase
-      .from("sites")
-      .select("site_code")
-      .eq("site_code", selectedSiteCode)
-      .maybeSingle();
+    const result = await response.json();
 
     if (cancelled) return;
 
-    if (error || !data) {
+    if (!response.ok || !result.success || !result.site?.siteCode) {
       setSiteCode("");
       setMessageType("error");
       setFormMessage(
@@ -480,8 +480,15 @@ useEffect(() => {
       return;
     }
 
-    setSiteCode(data.site_code);
+    setSiteCode(result.site.siteCode);
+  } catch (error) {
+    if (cancelled) return;
+
+    setSiteCode("");
+    setMessageType("error");
+    setFormMessage("Unable to verify the selected site. Please try again.");
   }
+}
 
   loadSiteCode();
 
@@ -495,6 +502,7 @@ useEffect(() => {
 useEffect(() => {
   if (!siteCode) {
     setSiteCompanies([]);
+    setCompaniesLoading(false);
     return;
   }
 
@@ -503,39 +511,31 @@ useEffect(() => {
   async function loadSiteCompanies() {
     setCompaniesLoading(true);
 
-    const supabase = createClient();
+    try {
+      const response = await fetch(
+        `/api/worker/site?siteCode=${encodeURIComponent(siteCode)}`
+      );
 
-    const { data: site, error: siteError } = await supabase
-      .from("sites")
-      .select("id")
-      .eq("site_code", siteCode)
-      .maybeSingle();
+      const result = await response.json();
 
-    if (siteError || !site) {
-      if (!cancelled) {
+      if (cancelled) return;
+
+      if (!response.ok || !result.success) {
+        console.error("Company loading error:", result.error);
         setSiteCompanies([]);
+      } else {
+        setSiteCompanies(result.companies ?? []);
+      }
+    } catch (error) {
+      if (cancelled) return;
+
+      console.error("Company loading error:", error);
+      setSiteCompanies([]);
+    } finally {
+      if (!cancelled) {
         setCompaniesLoading(false);
       }
-      return;
     }
-
-    const { data: companies, error: companyError } = await supabase
-      .from("companies")
-      .select("id, company_name, company_code")
-      .eq("site_id", site.id)
-      .eq("is_active", true)
-      .order("company_name");
-
-    if (cancelled) return;
-
-    if (companyError) {
-      console.error("Company loading error:", companyError);
-      setSiteCompanies([]);
-    } else {
-      setSiteCompanies(companies || []);
-    }
-
-    setCompaniesLoading(false);
   }
 
   loadSiteCompanies();
@@ -1284,7 +1284,15 @@ const compressedFile = await compressObservationPhoto(photo);
           </section>
         )}
 
-        <button type="button" onClick={handleBack} className="mt-5 w-full py-3 text-sm font-semibold text-blue-700 hover:underline">← {selectedCategory ? "Back to Select Category" : "Back to Home"}</button>
+        {(!isWorkerMode || selectedCategory) && (
+  <button
+    type="button"
+    onClick={handleBack}
+    className="mt-5 w-full py-3 text-sm font-semibold text-blue-700 hover:underline"
+  >
+    ← {selectedCategory ? "Back to Select Category" : "Back to Home"}
+  </button>
+)}
       </div>
     </main>
   );
