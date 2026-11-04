@@ -686,15 +686,14 @@ const selectedContractor = siteCompanies.find(
   (company) => company.company_name === contractorName
 );
 
-const companyCode =
-  violationCompany === "Contractor"
-    ? selectedContractor?.company_code ?? null
-    : null;
-
     const { error } = await supabase
       .from("observations")
       .insert({
         category: "Unsafe Act",
+        company_id:
+  violationCompany === "Contractor"
+    ? selectedContractor?.id ?? null
+    : null,
         site_code: siteCode,
         observation_date: observationDate,
         submitted_by: observerName.trim(),
@@ -702,7 +701,6 @@ const companyCode =
         status: "Close",
 
         violation_company: violationCompany,
-        company_code: companyCode,
         contractor_name:
           violationCompany === "Contractor"
             ? contractorName.trim()
@@ -834,7 +832,7 @@ const compressedFile = await compressObservationPhoto(photo);
     responsible_person: responsiblePerson.trim(),
     unsafe_condition_location: conditionLocation.trim(),
     observer_company: observerCompanyName.trim(),
-    company_code: companyCode,
+    company_id: selectedObserverCompany?.id ?? null,
     unsafe_condition_category: conditionCategory,
     unsafe_condition_sub_category: conditionSubCategory,
     unsafe_condition_hazard_class: hazardClass,
@@ -958,7 +956,7 @@ const compressedFile = await compressObservationPhoto(photo);
     near_miss_location: nearMissLocation.trim(),
     near_miss_responsible_person: nearMissResponsiblePerson.trim(),
     near_miss_company_name: nearMissCompanyName.trim(),
-    company_code: companyCode,
+    company_id: selectedNearMissCompany?.id ?? null,
     near_miss_observer_name: nearMissObserverName.trim(),
     near_miss_unsafe_type: nearMissUnsafeType,
     near_miss_category: nearMissCategory,

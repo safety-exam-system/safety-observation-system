@@ -243,8 +243,11 @@ function CompanyDashboardContent() {
   ).length;
 
   const closedCount = filteredObservations.filter(
-    (observation) => normalizedStatus(observation.status) === "closed"
-  ).length;
+  (observation) => {
+    const status = normalizedStatus(observation.status);
+    return status === "close" || status === "closed";
+  }
+).length;
 
   function openObservationList(category: string, status = "All") {
     const params = new URLSearchParams({

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { cookies } from "next/headers";
 
 export async function POST(request: Request) {
@@ -82,29 +82,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const secretKey = process.env.SUPABASE_SECRET_KEY;
-
-    if (!secretKey) {
-      console.error("SUPABASE_SECRET_KEY is not configured.");
-
-      return NextResponse.json(
-        { error: "Photo service is not configured." },
-        { status: 500 }
-      );
-    }
-
-    // The secret key is used only on the server.
-    const adminClient = createServiceClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      secretKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
-
     function getPaths(value: unknown): string[] {
       if (!value) return [];
 
@@ -172,7 +149,7 @@ export async function POST(request: Request) {
             return null;
           }
 
-          const { data, error } = await adminClient.storage
+          const { data, error } = await supabaseAdmin.storage
             .from("observation-photos")
             .createSignedUrl(path, 3600);
 
