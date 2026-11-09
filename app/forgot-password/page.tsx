@@ -1,41 +1,160 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase";
+import {
+  requestPasswordReset,
+  completePasswordReset,
+} from "@/app/actions/password-reset";
 
 type Step = "email" | "otp" | "password" | "success";
+type AccountType = "main" | "site";
 
 export default function ForgotPassword() {
+  const router = useRouter();
+
   const [step, setStep] = useState<Step>("email");
+  const [accountType, setAccountType] = useState<AccountType>("main");
+  const [siteCode, setSiteCode] = useState("");
+
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function sendOtp(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setMessage(
-      "OTP email service is not connected yet. Email delivery will be enabled when the backend is configured."
-    );
-  }
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
 
-  function verifyOtp(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setMessage(
-      "OTP verification is not connected yet. It will be enabled when the backend is configured."
-    );
-  }
+    const type = params.get("type");
+    const code = (params.get("siteCode") || "").trim().toUpperCase();
 
-  function resetPassword(event: React.FormEvent<HTMLFormElement>) {
+    if (type === "site" && code) {
+      setAccountType("site");
+      setSiteCode(code);
+    } else {
+      setAccountType("main");
+      setSiteCode("");
+    }
+  }, []);
+
+  async function sendOtp(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setMessage("");
 
-    if (newPassword.length < 8) {
-      setError("Password must contain at least 8 characters.");
+    if (!email.trim()) {
+      setError("Please enter your registered Email ID.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const result = await requestPasswordReset(
+        email,
+        accountType,
+        siteCode
+      );
+
+      if (!result.success) {
+        setError(result.message);
+      } else {
+        setMessage(result.message);
+        setStep("otp");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Unable to send OTP. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function verifyOtp(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+
+    if (!/^\d{8}$/.test(otp)) {
+      setError("Please enter a valid 8-digit OTP.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const supabase = createClient();
+
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        email: email.trim().toLowerCase(),
+        token: otp,
+        type: "recovery",
+      });
+
+      if (verifyError) {
+        setError(
+          "Invalid or expired OTP. Please check the code or request a new one."
+        );
+        return;
+      }
+
+      setMessage("OTP verified successfully. Create your new password.");
+      setStep("password");
+    } catch (err) {
+      console.error(err);
+      setError("OTP verification failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resendOtp() {
+    setError("");
+    setMessage("");
+    setOtp("");
+    setLoading(true);
+
+    try {
+      const result = await requestPasswordReset(
+        email,
+        accountType,
+        siteCode
+      );
+
+      if (result.success) {
+        setMessage("A new OTP request has been submitted. Please check your email.");
+        setStep("otp");
+      } else {
+        setError(result.message);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Unable to resend OTP. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resetPassword(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+
+    if (
+      newPassword.length < 8 ||
+      !/[a-z]/.test(newPassword) ||
+      !/[A-Z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword) ||
+      !/[^A-Za-z0-9]/.test(newPassword)
+    ) {
+      setError(
+        "Password must contain at least 8 characters, including uppercase, lowercase, number and special character."
+      );
       return;
     }
 
@@ -44,9 +163,38 @@ export default function ForgotPassword() {
       return;
     }
 
-    setError(
-      "Password reset is not connected yet. Secure backend authentication is required."
-    );
+    setLoading(true);
+
+    try {
+      const result = await completePasswordReset(
+        newPassword,
+        accountType,
+        siteCode
+      );
+
+      if (!result.success) {
+        setError(result.message);
+        return;
+      }
+
+      setStep("success");
+      setMessage("");
+    } catch (err) {
+      console.error(err);
+      setError("Unable to reset password. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function goToLogin() {
+    if (accountType === "site") {
+      router.push(
+        `/site-admin-login?siteCode=${encodeURIComponent(siteCode)}`
+      );
+    } else {
+      router.push("/login");
+    }
   }
 
   return (
@@ -62,8 +210,16 @@ export default function ForgotPassword() {
           </h1>
 
           <p className="mt-2 text-sm text-slate-600">
-            Admin Dashboard · Safety Observation
+            {accountType === "site"
+              ? "Site Admin Portal"
+              : "Main Admin Portal"}
           </p>
+
+          {accountType === "site" && (
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              SITE CODE: {siteCode}
+            </p>
+          )}
         </div>
 
         {step === "email" && (
@@ -74,15 +230,11 @@ export default function ForgotPassword() {
             </p>
 
             <div>
-              <label
-                htmlFor="email"
-                className="mb-2 block text-sm font-medium text-slate-700"
-              >
+              <label className="mb-2 block text-sm font-medium text-slate-700">
                 Email ID
               </label>
 
               <input
-                id="email"
                 type="email"
                 autoComplete="email"
                 value={email}
@@ -95,9 +247,10 @@ export default function ForgotPassword() {
 
             <button
               type="submit"
-              className="w-full rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white hover:bg-blue-800"
+              disabled={loading}
+              className="w-full rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
             >
-              Send OTP
+              {loading ? "Sending..." : "Send OTP"}
             </button>
           </form>
         )}
@@ -109,15 +262,11 @@ export default function ForgotPassword() {
             </p>
 
             <div>
-              <label
-                htmlFor="otp"
-                className="mb-2 block text-sm font-medium text-slate-700"
-              >
+              <label className="mb-2 block text-sm font-medium text-slate-700">
                 8-Digit OTP
               </label>
 
               <input
-                id="otp"
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
@@ -134,20 +283,17 @@ export default function ForgotPassword() {
 
             <button
               type="submit"
-              className="w-full rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white hover:bg-blue-800"
+              disabled={loading}
+              className="w-full rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
             >
-              Verify OTP
+              {loading ? "Verifying..." : "Verify OTP"}
             </button>
 
             <button
               type="button"
-              onClick={() => {
-                setOtp("");
-                setMessage("");
-                setError("");
-                setStep("email");
-              }}
-              className="w-full rounded-lg border border-slate-300 px-4 py-3 font-medium text-slate-700 hover:bg-slate-50"
+              onClick={resendOtp}
+              disabled={loading}
+              className="w-full rounded-lg border border-slate-300 px-4 py-3 font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
             >
               Resend OTP
             </button>
@@ -157,19 +303,15 @@ export default function ForgotPassword() {
         {step === "password" && (
           <form onSubmit={resetPassword} className="space-y-5">
             <p className="text-sm leading-6 text-slate-600">
-              Create a new password for your account.
+              OTP verified. Create a new password for your account.
             </p>
 
             <div>
-              <label
-                htmlFor="newPassword"
-                className="mb-2 block text-sm font-medium text-slate-700"
-              >
+              <label className="mb-2 block text-sm font-medium text-slate-700">
                 New Password
               </label>
 
               <input
-                id="newPassword"
                 type="password"
                 autoComplete="new-password"
                 value={newPassword}
@@ -181,15 +323,11 @@ export default function ForgotPassword() {
             </div>
 
             <div>
-              <label
-                htmlFor="confirmPassword"
-                className="mb-2 block text-sm font-medium text-slate-700"
-              >
+              <label className="mb-2 block text-sm font-medium text-slate-700">
                 Confirm New Password
               </label>
 
               <input
-                id="confirmPassword"
                 type="password"
                 autoComplete="new-password"
                 value={confirmPassword}
@@ -202,9 +340,10 @@ export default function ForgotPassword() {
 
             <button
               type="submit"
-              className="w-full rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white hover:bg-blue-800"
+              disabled={loading}
+              className="w-full rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
             >
-              Reset Password
+              {loading ? "Updating..." : "Reset Password"}
             </button>
           </form>
         )}
@@ -222,7 +361,7 @@ export default function ForgotPassword() {
             </p>
 
             <button
-              onClick={() => (window.location.href = "/admin-dashboard")}
+              onClick={goToLogin}
               className="w-full rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white hover:bg-blue-800"
             >
               Back to Login
@@ -233,7 +372,7 @@ export default function ForgotPassword() {
         {message && (
           <p
             role="status"
-            className="mt-5 rounded-lg bg-amber-50 p-3 text-sm leading-6 text-amber-800"
+            className="mt-5 rounded-lg bg-green-50 p-3 text-sm leading-6 text-green-800"
           >
             {message}
           </p>
@@ -248,28 +387,16 @@ export default function ForgotPassword() {
           </p>
         )}
 
-        <div className="mt-6 space-y-3 border-t border-slate-200 pt-5">
-          {step !== "email" && step !== "success" && (
+        <div className="mt-6 border-t border-slate-200 pt-5">
+          {step !== "success" && (
             <button
               type="button"
-              onClick={() => {
-                setMessage("");
-                setError("");
-                setStep(step === "password" ? "otp" : "email");
-              }}
-              className="w-full py-2 text-sm font-medium text-blue-700 hover:underline"
+              onClick={goToLogin}
+              className="w-full py-2 text-sm font-medium text-slate-600 hover:underline"
             >
-              ← Back
+              ← Back to Login
             </button>
           )}
-
-          <button
-            type="button"
-            onClick={() => (window.location.href = "/admin-dashboard")}
-            className="w-full py-2 text-sm font-medium text-slate-600 hover:underline"
-          >
-            ← Back to Admin Login
-          </button>
         </div>
       </section>
     </main>

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { logout } from "../actions/auth";
+import SiteAdminRequests from "./site-admin-requests";
 
 type Site = {
   id: string;
@@ -281,19 +282,32 @@ const [monthlyObservations, setMonthlyObservations] = useState<
     }
   }
 
-  function openObservationList(category: string, status?: string) {
-    const params = new URLSearchParams({
-      category,
-      siteCode,
-      siteName: site?.site_name || siteName,
-    });
+  function openObservationList(
+  category: string,
+  status?: string,
+  year?: string,
+  month?: string
+) {
+  const params = new URLSearchParams({
+    category,
+    siteCode,
+    siteName: site?.site_name || siteName,
+  });
 
-    if (status) {
-      params.set("status", status);
-    }
-
-    window.location.href = `/observation-list?${params.toString()}`;
+  if (status) {
+    params.set("status", status);
   }
+
+  if (year && year !== "All") {
+    params.set("year", year);
+  }
+
+  if (month) {
+    params.set("month", month);
+  }
+
+  window.location.href = `/observation-list?${params.toString()}`;
+}
 
   if (siteLoading) {
     return (
@@ -417,6 +431,7 @@ const monthNames = [
 
       return {
         month: monthName,
+        monthNumber,
         unsafeAct: monthRows.filter(
           (item) => item.category === "Unsafe Act"
         ).length,
@@ -544,6 +559,8 @@ const monthNames = [
           </form>
         </section>
 
+{/* Site Admin Approval Requests */}
+<SiteAdminRequests siteCode={siteCode} />
         {/* Observation Categories and Actual Counts */}
         <section>
           <h2 className="mb-4 text-xl font-bold text-slate-900">
@@ -746,6 +763,20 @@ const monthNames = [
               {item.nearMiss}
             </p>
           </div>
+          <button
+          type="button"
+          onClick={() =>
+            openObservationList(
+              "All",
+              undefined,
+              selectedYear,
+              item.monthNumber
+            )
+          }
+          className="mt-4 text-sm font-semibold text-blue-700 hover:underline"
+        >
+          View this month&apos;s observations →
+        </button>
         </div>
       </div>
     ))}

@@ -18,6 +18,7 @@ type Site = {
 type Observation = {
   id: string | number;
   site_code: string | null;
+  company_id?: string | null;
   category: string | null;
   observation_date: string | null;
   submitted_by: string | null;
@@ -67,8 +68,15 @@ function normalize(value: string | null | undefined) {
 
 function matchesCompany(
   observation: Observation,
+  companyId: string,
   companyName: string
 ) {
+  // New records: match by Company UUID.
+  if (observation.company_id) {
+    return observation.company_id === companyId;
+  }
+
+  // Older records: match by company name.
   const name = normalize(companyName);
 
   if (!name) return false;
@@ -160,9 +168,10 @@ function CompanyDashboardContent() {
           .from("observations")
           .select(
             [
-              "id",
-              "site_code",
-              "category",
+             "id",
+"company_id",
+"site_code",
+"category",
               "observation_date",
               "submitted_by",
               "description",
@@ -187,9 +196,12 @@ function CompanyDashboardContent() {
       const companyObservations: Observation[] = (
         (observationData || []) as unknown as Observation[]
       ).filter((observation) =>
-        matchesCompany(observation, currentCompany.company_name)
-      );
-
+  matchesCompany(
+    observation,
+    currentCompany.id,
+    currentCompany.company_name
+  )
+);
       setObservations(companyObservations);
     } catch (err) {
       console.error("Company dashboard loading error:", err);
@@ -619,16 +631,16 @@ function CompanyDashboardContent() {
           Refresh Dashboard
         </button>
 
-        {/* Back */}
-        <button
-          type="button"
-          onClick={() => {
-            window.location.href = "/company-code";
-          }}
-          className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          ← Back to Company Search
-        </button>
+        {/* Back to Previous Site Dashboard */}
+<button
+  type="button"
+  onClick={() => {
+    window.history.back();
+  }}
+  className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+>
+  ← Back to Site Dashboard
+</button>
 
         <footer className="mt-8 text-center text-xs text-slate-500">
           Safety Observation System

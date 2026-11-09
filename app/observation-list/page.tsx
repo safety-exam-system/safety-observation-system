@@ -792,13 +792,18 @@ function ObservationListContent() {
   const searchParams = useSearchParams();
 
   const category = searchParams.get("category") || "Unsafe Act";
+  const initialYear = searchParams.get("year") || "";
+const initialMonth = searchParams.get("month") || "";
+  const [selectedCategory, setSelectedCategory] = useState(category);
+const [searchUploadedBy, setSearchUploadedBy] = useState("");
+const [searchViolatorName, setSearchViolatorName] = useState("");
   const siteName = searchParams.get("siteName") || "Site Dashboard";
   const siteCode = searchParams.get("siteCode") || "";
   const initialStatus = searchParams.get("status") || "";
 
   const [observations, setObservations] = useState<Observation[]>([]);
-  const [selectedYear, setSelectedYear] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedYear, setSelectedYear] = useState(initialYear);
+  const [selectedMonth, setSelectedMonth] = useState(initialMonth);
   const [searchName, setSearchName] = useState("");
   const [selectedStatus, setSelectedStatus] = useState(initialStatus);
   const [loading, setLoading] = useState(true);
@@ -822,17 +827,16 @@ function ObservationListContent() {
     try {
       const supabase = createClient();
 
-      let query = supabase
+      const { data, error } = await supabase
         .from("observations")
         .select("*")
         .eq("site_code", siteCode)
+        .in("category", [
+          "Unsafe Act",
+          "Unsafe Condition",
+          "Near Miss",
+        ])
         .order("observation_date", { ascending: false });
-
-      if (category !== "All") {
-        query = query.eq("category", category);
-      }
-
-      const { data, error } = await query;
 
       if (error) {
         console.error("Observation loading error:", error);
@@ -857,61 +861,61 @@ function ObservationListContent() {
     void loadObservations();
   }, [loadObservations]);
 
-  const years = useMemo(() => {
-    return Array.from(
-      new Set(
-        observations
-          .map((item) => item.observation_date)
-          .filter((date): date is string => Boolean(date))
-          .map((date) => date.slice(0, 4))
-      )
-    ).sort((a, b) => b.localeCompare(a));
-  }, [observations]);
+ const filteredObservations = useMemo(() => {
+  const uploadedBySearch = searchUploadedBy.trim().toLowerCase();
+  const violatorSearch = searchViolatorName.trim().toLowerCase();
+  const statusFilter = (selectedStatus || "").trim().toLowerCase();
 
-  const filteredObservations = useMemo(() => {
-    const search = searchName.trim().toLowerCase();
+  return observations.filter((item) => {
+    const date = item.observation_date || "";
+    const observationYear = date.slice(0, 4);
+    const observationMonth = date.slice(5, 7);
 
-    return observations.filter((item) => {
-      const date = item.observation_date || "";
-      const observationYear = date.slice(0, 4);
-      const observationMonth = date.slice(5, 7);
+    const matchesCategory =
+      selectedCategory === "All" ||
+      item.category === selectedCategory;
 
-      const namesToSearch = [
-        item.submitted_by,
-        item.violator_name,
-        item.responsible_person,
-        item.reporting_person,
-        item.near_miss_responsible_person,
-        item.contractor_name,
-        item.violation_company,
-      ];
+    const matchesUploadedBy =
+      !uploadedBySearch ||
+      String(item.submitted_by || "")
+        .toLowerCase()
+        .includes(uploadedBySearch);
 
-      const matchesName =
-        !search ||
-        namesToSearch.some((name) =>
-          String(name || "").toLowerCase().includes(search)
-        );
+    const matchesViolatorName =
+      selectedCategory !== "Unsafe Act" ||
+      !violatorSearch ||
+      String(item.violator_name || "")
+        .toLowerCase()
+        .includes(violatorSearch);
 
-      return (
-        (!selectedYear || observationYear === selectedYear) &&
-        (!selectedMonth || observationMonth === selectedMonth) &&
-        matchesName &&
-        (
-          !selectedStatus ||
-          (selectedStatus.toLowerCase() === "open" &&
-            (item.status || "").toLowerCase() === "open") ||
-          (selectedStatus.toLowerCase() === "close" &&
-            ["close", "closed"].includes((item.status || "").toLowerCase()))
-        )
+    const itemStatus = (item.status || "").trim().toLowerCase();
+
+    const matchesStatus =
+      !statusFilter ||
+      statusFilter === "all" ||
+      (statusFilter === "open" && itemStatus === "open") ||
+      (
+        ["close", "closed"].includes(statusFilter) &&
+        ["close", "closed"].includes(itemStatus)
       );
-    });
-  }, [
-    observations,
-    selectedYear,
-    selectedMonth,
-    searchName,
-    selectedStatus,
-  ]);
+    return (
+      matchesCategory &&
+      (!selectedYear || observationYear === selectedYear) &&
+      (!selectedMonth || observationMonth === selectedMonth) &&
+      matchesUploadedBy &&
+      matchesViolatorName &&
+      matchesStatus
+    );
+  });
+}, [
+  observations,
+  selectedCategory,
+  selectedYear,
+  selectedMonth,
+  searchUploadedBy,
+  searchViolatorName,
+  selectedStatus,
+]);
 
   const categoryIcon =
     category === "Unsafe Condition"
@@ -981,7 +985,15 @@ function ObservationListContent() {
       setDownloadingId(null);
     }
   }
+const years = useMemo<string[]>(() => {
+  const yearList = observations
+    .map((item) => (item.observation_date || "").slice(0, 4))
+    .filter((year) => /^\d{4}$/.test(year));
 
+  return Array.from(new Set(yearList)).sort(
+    (a, b) => Number(b) - Number(a)
+  );
+}, [observations]);
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-8 sm:px-6">
       <div className="mx-auto max-w-5xl">
@@ -1030,6 +1042,33 @@ function ObservationListContent() {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
+  <label
+    htmlFor="category"
+    className="mb-1 block text-sm font-medium text-slate-700"
+  >
+    Observation Category
+  </label>
+
+  <select
+    id="category"
+    value={selectedCategory}
+    onChange={(event) => {
+      const nextCategory = event.target.value;
+      setSelectedCategory(nextCategory);
+
+      if (nextCategory !== "Unsafe Act") {
+        setSearchViolatorName("");
+      }
+    }}
+    className="w-full rounded-lg border border-slate-300 px-3 py-3 outline-none focus:border-blue-600"
+  >
+    <option value="All">All Categories</option>
+    <option value="Unsafe Act">Unsafe Act</option>
+    <option value="Unsafe Condition">Unsafe Condition</option>
+    <option value="Near Miss">Near Miss</option>
+  </select>
+</div>
+            <div>
               <label
                 htmlFor="year"
                 className="mb-2 block text-sm font-medium text-slate-700"
@@ -1053,56 +1092,42 @@ function ObservationListContent() {
             </div>
 
             <div>
-              <label
-                htmlFor="month"
-                className="mb-2 block text-sm font-medium text-slate-700"
-              >
-                Search Month
-              </label>
+  <label
+    htmlFor="uploadedBy"
+    className="mb-2 block text-sm font-medium text-slate-700"
+  >
+    Search by Uploaded By
+  </label>
 
-              <select
-                id="month"
-                value={selectedMonth}
-                onChange={(event) => setSelectedMonth(event.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-3 text-slate-800 outline-none focus:border-blue-600"
-              >
-                <option value="">All Months</option>
-                <option value="01">January</option>
-                <option value="02">February</option>
-                <option value="03">March</option>
-                <option value="04">April</option>
-                <option value="05">May</option>
-                <option value="06">June</option>
-                <option value="07">July</option>
-                <option value="08">August</option>
-                <option value="09">September</option>
-                <option value="10">October</option>
-                <option value="11">November</option>
-                <option value="12">December</option>
-              </select>
-            </div>
+  <input
+    id="uploadedBy"
+    type="text"
+    value={searchUploadedBy}
+    onChange={(event) => setSearchUploadedBy(event.target.value)}
+    placeholder="Enter observer / uploader name"
+    className="w-full rounded-lg border border-slate-300 px-3 py-3 outline-none focus:border-blue-600"
+  />
+</div>
 
-            <div>
-              <label
-                htmlFor="name"
-                className="mb-2 block text-sm font-medium text-slate-700"
-              >
-                Search by Name
-              </label>
+{selectedCategory === "Unsafe Act" && (
+  <div>
+    <label
+      htmlFor="violatorName"
+      className="mb-2 block text-sm font-medium text-slate-700"
+    >
+      Search by Violator Name
+    </label>
 
-              <input
-                id="name"
-                type="text"
-                value={searchName}
-                onChange={(event) => setSearchName(event.target.value)}
-                placeholder="Enter person's name"
-                className="w-full rounded-lg border border-slate-300 px-3 py-3 outline-none focus:border-blue-600"
-              />
-
-              <p className="mt-1 text-xs text-slate-500">
-                Searches submitter and related person names.
-              </p>
-            </div>
+    <input
+      id="violatorName"
+      type="text"
+      value={searchViolatorName}
+      onChange={(event) => setSearchViolatorName(event.target.value)}
+      placeholder="Enter violator name"
+      className="w-full rounded-lg border border-slate-300 px-3 py-3 outline-none focus:border-blue-600"
+    />
+  </div>
+)}
 
             <div>
               <label

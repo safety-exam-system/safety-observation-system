@@ -160,7 +160,7 @@ export default function SiteSelectionPage() {
     siteName: site.site_name,
   });
 
-  router.push(`/site-portal?${params.toString()}`);
+  router.push(`/site-access?${params.toString()}`);
 }
 
   function resetSelection() {

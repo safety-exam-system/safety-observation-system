@@ -69,10 +69,10 @@ function SitePortalContent() {
 
         <button
           type="button"
-          onClick={() => router.push("/site-selection")}
+          onClick={() => router.push(`/site-access?${siteParams}`)}
           className="mt-6 w-full py-2 text-sm font-medium text-blue-700 hover:underline"
         >
-          ← Back to Site Selection
+          ← Back to Site Access
         </button>
 
       </section>

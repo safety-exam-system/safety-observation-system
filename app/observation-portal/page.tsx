@@ -155,7 +155,17 @@ const labelClass = "mb-2 block text-sm font-semibold text-slate-700";
 function formatLocalDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
-
+function isObservationDateAllowed(
+  selectedDate: string,
+  today: string,
+  minAllowed: string
+) {
+  return (
+    selectedDate !== "" &&
+    selectedDate >= minAllowed &&
+    selectedDate <= today
+  );
+}
 function PhotoPicker({
   id,
   photos,
@@ -439,8 +449,8 @@ useEffect(() => {
   const todayValue = formatLocalDate(now);
 
   const minDate = new Date(now);
-  minDate.setDate(minDate.getDate() - 5);
-  const minValue = formatLocalDate(minDate);
+minDate.setDate(minDate.getDate() - 3);
+const minValue = formatLocalDate(minDate);
 
   setToday(todayValue);
   setMinAllowed(minValue);
@@ -620,7 +630,13 @@ async function handleSaveUnsafeAct(event: FormEvent<HTMLFormElement>) {
     !location.trim() ||
     !atRiskBehaviourDescription.trim() ||
     !behaviourCategory
-  ) {
+  ) {if (!isObservationDateAllowed(observationDate, today, minAllowed)) {
+  setMessageType("error");
+  setFormMessage(
+    "Observation date must be between today and the previous 3 days."
+  );
+  return;
+}
     setMessageType("error");
     setFormMessage("Please complete all required fields.");
     return;
@@ -764,7 +780,13 @@ const selectedContractor = siteCompanies.find(
     !leadingActivity.trim() ||
     !recommendations.trim() ||
     !siteIncharge.trim()
-  ) {
+  ) {if (!isObservationDateAllowed(conditionDate, today, minAllowed)) {
+  setMessageType("error");
+  setFormMessage(
+    "Observation date must be between today and the previous 3 days."
+  );
+  return;
+}
     setMessageType("error");
     setFormMessage("Please complete all required fields.");
     return;
@@ -888,7 +910,13 @@ const compressedFile = await compressObservationPhoto(photo);
     !nearMissLeadingActivity.trim() ||
     !nearMissRootCause ||
     !nearMissSiteIncharge.trim()
-  ) {
+  ) {if (!isObservationDateAllowed(nearMissDate, today, minAllowed)) {
+  setMessageType("error");
+  setFormMessage(
+    "Observation date must be between today and the previous 3 days."
+  );
+  return;
+}
     setMessageType("error");
     setFormMessage("Please complete all required fields.");
     return;

@@ -59,7 +59,13 @@ if (claims && pathname === "/login") {
   siteUrl.pathname = "/site-selection";
   siteUrl.search = "";
 
-  return NextResponse.redirect(siteUrl);
+  const redirectResponse = NextResponse.redirect(siteUrl);
+
+  response.cookies.getAll().forEach((cookie) => {
+    redirectResponse.cookies.set(cookie);
+  });
+
+  return redirectResponse;
 }
 
   return response;
