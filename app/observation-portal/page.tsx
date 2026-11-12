@@ -601,6 +601,20 @@ useEffect(() => {
     return;
   }
 
+  const params = new URLSearchParams(window.location.search);
+  const returnTo = params.get("returnTo");
+
+  if (returnTo === "/all-sites/options") {
+    const siteParams = new URLSearchParams({
+  siteCode,
+  siteName: params.get("siteName") || "",
+});
+
+    router.push(`/all-sites/options?${siteParams.toString()}`);
+    return;
+  }
+
+  // পুরোনো Site Portal-এর Back System
   if (siteCode) {
     router.push(`/site-portal?siteCode=${encodeURIComponent(siteCode)}`);
   } else {
