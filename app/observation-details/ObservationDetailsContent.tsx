@@ -288,6 +288,20 @@ const [closingFile, setClosingFile] = useState<File | null>(null);
 const [closingPreview, setClosingPreview] = useState("");
 const [closingSaving, setClosingSaving] = useState(false);
 const [closingError, setClosingError] = useState("");
+// Unsafe Condition Closing Fields
+const [observationWhyHappened, setObservationWhyHappened] = useState("");
+const [observationPotentialConsequence, setObservationPotentialConsequence] = useState("");
+const [observationCorrectionAction, setObservationCorrectionAction] = useState("");
+const [observationActionTakenBy, setObservationActionTakenBy] = useState("");
+const [observationClosedDate, setObservationClosedDate] = useState("");
+
+// Near Miss Closing Fields
+const [nearMissWhyHappened, setNearMissWhyHappened] = useState("");
+const [nearMissPotentialConsequence, setNearMissPotentialConsequence] = useState("");
+const [nearMissCorrectionAction, setNearMissCorrectionAction] = useState("");
+const [nearMissCorrectiveAction, setNearMissCorrectiveAction] = useState("");
+const [nearMissActionTakenBy, setNearMissActionTakenBy] = useState("");
+const [nearMissClosedDate, setNearMissClosedDate] = useState("");
   const loadPhotos = useCallback(
   async (value: unknown): Promise<Photo[]> => {
     const paths = extractStoragePaths(value);
@@ -423,6 +437,38 @@ async function handleCloseObservation(
   event.preventDefault();
   setClosingError("");
 
+  const category = (observation?.category || "").toLowerCase();
+
+if (category === "unsafe condition") {
+  if (
+    !observationWhyHappened.trim() ||
+    !observationPotentialConsequence.trim() ||
+    !observationCorrectionAction.trim() ||
+    !observationActionTakenBy.trim() ||
+    !observationClosedDate ||
+    !closingFile
+  ) {
+    setClosingError(
+      "Please complete all Unsafe Condition closing fields and upload the closing photo."
+    );
+    return;
+  }
+} else if (category === "near miss") {
+  if (
+    !nearMissWhyHappened.trim() ||
+    !nearMissPotentialConsequence.trim() ||
+    !nearMissCorrectionAction.trim() ||
+    !nearMissCorrectiveAction.trim() ||
+    !nearMissActionTakenBy.trim() ||
+    !nearMissClosedDate ||
+    !closingFile
+  ) {
+    setClosingError(
+      "Please complete all Near Miss closing fields and upload the evidence photo."
+    );
+    return;
+  }
+} else {
   if (
     !correctiveAction.trim() ||
     !rootCause.trim() ||
@@ -435,11 +481,41 @@ async function handleCloseObservation(
     );
     return;
   }
+}
 
   if (!observation || observation.status !== "Open") {
     setClosingError("This observation is not open.");
     return;
   }
+  const selectedClosingDate =
+  (observation.category || "").toLowerCase() === "unsafe condition"
+    ? observationClosedDate
+    : (observation.category || "").toLowerCase() === "near miss"
+      ? nearMissClosedDate
+      : "";
+
+if (
+  selectedClosingDate &&
+  (
+    selectedClosingDate < minimumClosingDate ||
+    selectedClosingDate > today
+  )
+) {
+  setClosingError(
+    "Closing Date must be between the Reporting Date and today."
+  );
+  return;
+}
+
+if (
+  ["unsafe condition", "near miss"].includes(
+    (observation.category || "").toLowerCase()
+  ) &&
+  !selectedClosingDate
+) {
+  setClosingError("Please select a valid Closing Date.");
+  return;
+}
 
   if (!siteCode || !/^[A-Z0-9]{3}$/.test(siteCode)) {
     setClosingError("Invalid Site Code. Please return to the Site Dashboard.");
@@ -483,15 +559,36 @@ if (compressedFile.size > 60 * 1024) {
     const { data, error: updateError } = await supabase
       .from("observations")
       .update({
-        corrective_action: correctiveAction.trim(),
-        root_cause: rootCause.trim(),
-        preventive_action: preventiveAction.trim(),
-        closing_remarks: closingRemarks.trim() || null,
-        closed_by: closedBy.trim(),
-        closed_at: new Date().toISOString(),
-        closure_photo_urls: [photoPath],
-        status: "Close",
-      })
+  ...(category === "unsafe condition"
+    ? {
+        observation_why_happened: observationWhyHappened.trim(),
+        observation_potential_consequence: observationPotentialConsequence.trim(),
+        observation_correction_action: observationCorrectionAction.trim(),
+        observation_action_taken_by: observationActionTakenBy.trim(),
+        observation_report_closed_date: observationClosedDate,
+        closed_by: observationActionTakenBy.trim(),
+      }
+    : category === "near miss"
+      ? {
+          near_miss_why_happened: nearMissWhyHappened.trim(),
+          near_miss_potential_consequence: nearMissPotentialConsequence.trim(),
+          near_miss_correction_action: nearMissCorrectionAction.trim(),
+          near_miss_corrective_action: nearMissCorrectiveAction.trim(),
+          near_miss_action_taken_by: nearMissActionTakenBy.trim(),
+          near_miss_report_closed_date: nearMissClosedDate,
+          closed_by: nearMissActionTakenBy.trim(),
+        }
+      : {
+          corrective_action: correctiveAction.trim(),
+          root_cause: rootCause.trim(),
+          preventive_action: preventiveAction.trim(),
+          closing_remarks: closingRemarks.trim() || null,
+          closed_by: closedBy.trim(),
+        }),
+  closed_at: new Date().toISOString(),
+  closure_photo_urls: [photoPath],
+  status: "Close",
+})
       .eq("id", observation.id)
       .eq("site_code", siteCode)
       .eq("status", "Open")
@@ -569,7 +666,15 @@ if (compressedFile.size > 60 * 1024) {
   }
 
   const isClosed = observation.status === "Close";
+const todayDate = new Date();
+const today = [
+  todayDate.getFullYear(),
+  String(todayDate.getMonth() + 1).padStart(2, "0"),
+  String(todayDate.getDate()).padStart(2, "0"),
+].join("-");
 
+const minimumClosingDate =
+  observation.observation_date?.slice(0, 10) || "";
   const excludedFromGeneralDetails = new Set([
     "id",
     "site_code",
@@ -869,80 +974,225 @@ if (compressedFile.size > 60 * 1024) {
     </p>
 
     <form onSubmit={handleCloseObservation} className="mt-5 space-y-5">
-      <div>
-        <label className="mb-2 block text-sm font-semibold text-slate-700">
-          Corrective Action *
-        </label>
-        <textarea
-          value={correctiveAction}
-          onChange={(event) => setCorrectiveAction(event.target.value)}
-          required
-          rows={3}
-          className="w-full rounded-lg border border-slate-300 p-3 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-          placeholder="Describe how the issue was corrected."
-        />
-      </div>
+      
+  {(observation.category || "").toLowerCase() === "unsafe condition" && (
+        <>
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              Why It Happened? (The Observation) *
+            </label>
+            <textarea
+              value={observationWhyHappened}
+              onChange={(event) => setObservationWhyHappened(event.target.value)}
+              required
+              rows={3}
+              className="w-full rounded-lg border border-slate-300 p-3"
+              placeholder="Explain why the unsafe condition happened."
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              What Could Have Happened? *
+            </label>
+            <textarea
+              value={observationPotentialConsequence}
+              onChange={(event) => setObservationPotentialConsequence(event.target.value)}
+              required
+              rows={3}
+              className="w-full rounded-lg border border-slate-300 p-3"
+              placeholder="Describe the possible consequence."
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              Correction Action (Observation) *
+            </label>
+            <textarea
+              value={observationCorrectionAction}
+              onChange={(event) => setObservationCorrectionAction(event.target.value)}
+              required
+              rows={3}
+              className="w-full rounded-lg border border-slate-300 p-3"
+              placeholder="Describe the correction action taken."
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              Action Taken By (Observation) *
+            </label>
+            <input
+              type="text"
+              value={observationActionTakenBy}
+              onChange={(event) => setObservationActionTakenBy(event.target.value)}
+              required
+              maxLength={150}
+              className="w-full rounded-lg border border-slate-300 p-3"
+              placeholder="Enter the responsible person's name."
+            />
+          </div>
+        </>
+      )}
+
+      {(observation.category || "").toLowerCase() === "near miss" && (
+        <>
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              Why It Happened? (Near Miss) *
+            </label>
+            <textarea
+              value={nearMissWhyHappened}
+              onChange={(event) => setNearMissWhyHappened(event.target.value)}
+              required
+              rows={3}
+              className="w-full rounded-lg border border-slate-300 p-3"
+              placeholder="Explain why the near miss happened."
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              What Could Have Happened? (Near Miss) *
+            </label>
+            <textarea
+              value={nearMissPotentialConsequence}
+              onChange={(event) => setNearMissPotentialConsequence(event.target.value)}
+              required
+              rows={3}
+              className="w-full rounded-lg border border-slate-300 p-3"
+              placeholder="Describe the possible consequence."
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              Correction Action (Near Miss) *
+            </label>
+            <textarea
+              value={nearMissCorrectionAction}
+              onChange={(event) => setNearMissCorrectionAction(event.target.value)}
+              required
+              rows={3}
+              className="w-full rounded-lg border border-slate-300 p-3"
+              placeholder="Describe the immediate correction action."
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              Corrective Action *
+            </label>
+            <textarea
+              value={nearMissCorrectiveAction}
+              onChange={(event) => setNearMissCorrectiveAction(event.target.value)}
+              required
+              rows={3}
+              className="w-full rounded-lg border border-slate-300 p-3"
+              placeholder="Describe the corrective action."
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              Action Taken By (Near Miss) *
+            </label>
+            <input
+              type="text"
+              value={nearMissActionTakenBy}
+              onChange={(event) => setNearMissActionTakenBy(event.target.value)}
+              required
+              maxLength={150}
+              className="w-full rounded-lg border border-slate-300 p-3"
+              placeholder="Enter the responsible person's name."
+            />
+          </div>
+        </>
+      )}
+
+      {(observation.category || "").toLowerCase() !== "unsafe condition" &&
+        (observation.category || "").toLowerCase() !== "near miss" && (
+          <>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
+                Corrective Action *
+              </label>
+              <textarea
+                value={correctiveAction}
+                onChange={(event) => setCorrectiveAction(event.target.value)}
+                required
+                rows={3}
+                className="w-full rounded-lg border border-slate-300 p-3"
+                placeholder="Describe how the issue was corrected."
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
+                Root Cause *
+              </label>
+              <textarea
+                value={rootCause}
+                onChange={(event) => setRootCause(event.target.value)}
+                required
+                rows={3}
+                className="w-full rounded-lg border border-slate-300 p-3"
+                placeholder="Describe the root cause."
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
+                Preventive Action *
+              </label>
+              <textarea
+                value={preventiveAction}
+                onChange={(event) => setPreventiveAction(event.target.value)}
+                required
+                rows={3}
+                className="w-full rounded-lg border border-slate-300 p-3"
+                placeholder="Describe how recurrence will be prevented."
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
+                Closing Remarks
+              </label>
+              <textarea
+                value={closingRemarks}
+                onChange={(event) => setClosingRemarks(event.target.value)}
+                rows={2}
+                className="w-full rounded-lg border border-slate-300 p-3"
+                placeholder="Additional closure remarks (optional)."
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
+                Closed By *
+              </label>
+              <input
+                type="text"
+                value={closedBy}
+                onChange={(event) => setClosedBy(event.target.value)}
+                required
+                maxLength={150}
+                className="w-full rounded-lg border border-slate-300 p-3"
+                placeholder="Enter the responsible person's name."
+              />
+            </div>
+          </>
+        )}
 
       <div>
         <label className="mb-2 block text-sm font-semibold text-slate-700">
-          Root Cause *
+          {(observation.category || "").toLowerCase() === "near miss"
+            ? "Upload Correction/Corrective Action Evidence (Near Miss) *"
+            : "Closing Photo / Evidence *"}
         </label>
-        <textarea
-          value={rootCause}
-          onChange={(event) => setRootCause(event.target.value)}
-          required
-          rows={3}
-          className="w-full rounded-lg border border-slate-300 p-3 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-          placeholder="Describe the root cause."
-        />
-      </div>
 
-      <div>
-        <label className="mb-2 block text-sm font-semibold text-slate-700">
-          Preventive Action *
-        </label>
-        <textarea
-          value={preventiveAction}
-          onChange={(event) => setPreventiveAction(event.target.value)}
-          required
-          rows={3}
-          className="w-full rounded-lg border border-slate-300 p-3 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-          placeholder="Describe how recurrence will be prevented."
-        />
-      </div>
-
-      <div>
-        <label className="mb-2 block text-sm font-semibold text-slate-700">
-          Closing Remarks
-        </label>
-        <textarea
-          value={closingRemarks}
-          onChange={(event) => setClosingRemarks(event.target.value)}
-          rows={2}
-          className="w-full rounded-lg border border-slate-300 p-3 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-          placeholder="Additional closure remarks (optional)."
-        />
-      </div>
-
-      <div>
-        <label className="mb-2 block text-sm font-semibold text-slate-700">
-          Closed By *
-        </label>
-        <input
-          type="text"
-          value={closedBy}
-          onChange={(event) => setClosedBy(event.target.value)}
-          required
-          maxLength={150}
-          className="w-full rounded-lg border border-slate-300 p-3 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-          placeholder="Enter the responsible person's name."
-        />
-      </div>
-
-      <div>
-        <label className="mb-2 block text-sm font-semibold text-slate-700">
-          Closing Photo / Evidence *
-        </label>
         <input
           type="file"
           accept="image/*"
@@ -986,7 +1236,39 @@ if (compressedFile.size > 60 * 1024) {
           </div>
         )}
       </div>
+{(observation.category || "").toLowerCase() === "unsafe condition" && (
+  <div>
+    <label className="mb-2 block text-sm font-semibold text-slate-700">
+      Closed Date *
+    </label>
+    <input
+      type="date"
+      value={observationClosedDate}
+      onChange={(event) => setObservationClosedDate(event.target.value)}
+      min={minimumClosingDate}
+      max={today}
+      required
+      className="w-full rounded-lg border border-slate-300 p-3"
+    />
+  </div>
+)}
 
+{(observation.category || "").toLowerCase() === "near miss" && (
+  <div>
+    <label className="mb-2 block text-sm font-semibold text-slate-700">
+      Report Closed Date *
+    </label>
+    <input
+      type="date"
+      value={nearMissClosedDate}
+      onChange={(event) => setNearMissClosedDate(event.target.value)}
+      min={minimumClosingDate}
+      max={today}
+      required
+      className="w-full rounded-lg border border-slate-300 p-3"
+    />
+  </div>
+)}
       {closingError && (
         <p
           role="alert"

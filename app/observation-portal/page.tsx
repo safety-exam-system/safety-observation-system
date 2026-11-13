@@ -631,7 +631,13 @@ useEffect(() => {
 async function handleSaveUnsafeAct(event: FormEvent<HTMLFormElement>) {
   event.preventDefault();
   setFormMessage("");
-
+if (!isObservationDateAllowed(observationDate, today, minAllowed)) {
+  setMessageType("error");
+  setFormMessage(
+    "Unsafe Act date must be between today and the previous 3 days."
+  );
+  return;
+}
   // Required-field validation
   if (
     !violationCompany ||
@@ -778,7 +784,13 @@ const selectedContractor = siteCompanies.find(
 ) {
   event.preventDefault();
   setFormMessage("");
-
+if (!isObservationDateAllowed(conditionDate, today, minAllowed)) {
+  setMessageType("error");
+  setFormMessage(
+    "Unsafe Condition date must be between today and the previous 3 days."
+  );
+  return;
+}
   // Validate required fields
   if (
     !siteCode.trim() ||
@@ -929,6 +941,13 @@ const compressedFile = await compressObservationPhoto(photo);
   setFormMessage(
     "Observation date must be between today and the previous 3 days."
   );
+  if (!isObservationDateAllowed(nearMissDate, today, minAllowed)) {
+    setMessageType("error");
+    setFormMessage(
+      "Near Miss date must be between today and the previous 3 days."
+    );
+    return;
+  }
   return;
 }
     setMessageType("error");
